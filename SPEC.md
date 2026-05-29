@@ -7,7 +7,8 @@ implementation of KYA-OS: a clean, readable, spec-traced MCP-I server built on
 DB's real Verifiable Credential stack. Conformance is table stakes; readability
 and spec-traceability are the point.
 
-> Status: planning doc. No code written yet. This is the artifact to review
+> Status: planning doc. **Phase 0.5 (TS→JS + JSDoc conversion) complete** — see
+> §6. Remaining phases (DB-stack swap onward) are still the artifact to review
 > before implementation.
 
 ---
@@ -17,7 +18,7 @@ and spec-traceability are the point.
 | | In scope | Out of scope |
 |---|---|---|
 | **Role** | A reference impl others read to understand KYA-OS | *The* WG-blessed reference impl (DIF/Vouched own that) |
-| **Language** | Plain JavaScript (ESM) + **JSDoc** types — DB house style | TypeScript (repo currently is TS; must be converted) |
+| **Language** | Plain JavaScript (ESM) + **JSDoc** types — DB house style | TypeScript (conversion complete — repo is now JS + JSDoc) |
 | **Stack** | `@digitalbazaar/vc` + Data Integrity as the primary path | Hand-rolled JWT/`@noble` as primary |
 | **Levels** | L1 (legacy/JWT nod) + L2 (full) this phase | L3 selective disclosure → **Phase 2** |
 | **License** | **BSD** (DB standard), public repo | — |
@@ -57,21 +58,23 @@ Sources:
 
 ## 3. Where the repo stands today
 
-Already implemented (more than the README admits) — but **all hand-rolled**:
+Already implemented (more than the README admits) — now **converted to JS +
+JSDoc** (Phase 0.5) but still **all hand-rolled crypto**:
 
 | File | Does | Reference-impl verdict |
 |---|---|---|
-| `lib/crypto.ts` | Ed25519 via `@noble`, base64url helpers | **Replace** — use `@digitalbazaar/ed25519-multikey` |
-| `lib/vc.ts` | Hand-rolled JWT VC issue/parse/verify | **Replace** — use `@digitalbazaar/vc` + Data Integrity |
-| `lib/chain.ts` | Delegation-chain verify (continuity, cycles, depth, `delegatedFrom` hash) | **Keep logic, re-base** on DB-verified links |
-| `lib/claimPredicates.ts` | `$eq/$gt/$in/...` scope checking | **Keep** — maps to KYA-OS scope array |
-| `lib/revocation.ts` + `statusListFetcher.ts` | StatusList2021 bitstring | **Keep**, confirm vs DB `vc-status-list` |
-| `lib/challenge.ts` | Nonce challenge/response auth | **Keep** — L2 agent authentication |
-| `lib/resolver.ts` | Universal Resolver client | **Keep**, add native `did:key`/`did:web` |
-| `jose` dependency | Unused (JWT is hand-rolled) | **Remove** |
+| `lib/core/crypto.js` | Ed25519 via `@noble`, base64url helpers | **Replace** — use `@digitalbazaar/ed25519-multikey` |
+| `lib/core/vc.js` | Hand-rolled JWT VC issue/parse/verify | **Replace** — use `@digitalbazaar/vc` + Data Integrity |
+| `lib/core/chain.js` | Delegation-chain verify (continuity, cycles, depth, `delegatedFrom` hash) | **Keep logic, re-base** on DB-verified links |
+| `lib/core/claimPredicates.js` | `$eq/$gt/$in/...` scope checking | **Keep** — maps to KYA-OS scope array |
+| `lib/core/revocation.js` + `statusListFetcher.js` | StatusList2021 bitstring | **Keep**, confirm vs DB `vc-status-list` |
+| `lib/core/challenge.js` | Nonce challenge/response auth | **Keep** — L2 agent authentication |
+| `lib/core/resolver.js` | Universal Resolver client | **Keep**, add native `did:key`/`did:web` |
+| `jose` dependency | Unused (JWT is hand-rolled) | ✅ **Removed** in Phase 0.5 |
 
-Tools (`resolve`, `verify`, `issue`, `delegate`, `auth`, `verifyChain`) stay as
-the MCP surface; their `lib/` internals get swapped underneath.
+Tools (`resolve`, `verify`, `issue`, `delegate`, `auth`, `verifyChain`) now live
+in `lib/tools/` as the MCP surface; their `lib/core/` internals get swapped
+underneath.
 
 ---
 
@@ -90,18 +93,23 @@ Library choices (verified against current npm/DB repos):
 - Phase 2: `@digitalbazaar/ecdsa-sd-2023-cryptosuite` (selective disclosure is
   **ECDSA**, not Ed25519 — Phase 2 keys differ)
 
+Layout below is the **realized** `lib/core` + `lib/tools` split (Phase 0.5),
+with the `.js` target language. `documentLoader.js` is the one file still to add
+(Phase 1).
+
 ```text
-src/
-  lib/                         # pure, no IO (functional core)
-    crypto.ts        → multikey gen/sign/verify (wraps ed25519-multikey)
-    vc.ts            → issue/verify via @digitalbazaar/vc + data-integrity
-    chain.ts         → delegation chain (re-based on DB-verified links)
-    claimPredicates.ts → scope-array enforcement (unchanged)
-    revocation.ts    → StatusList (reconcile w/ DB vc-status-list)
-    challenge.ts     → nonce auth (unchanged)
+lib/
+  core/                        # pure, no IO (functional core)
+    crypto.js        → multikey gen/sign/verify (wraps ed25519-multikey)
+    vc.js            → issue/verify via @digitalbazaar/vc + data-integrity
+    chain.js         → delegation chain (re-based on DB-verified links)
+    claimPredicates.js → scope-array enforcement (unchanged)
+    revocation.js    + statusListFetcher.js → StatusList (reconcile w/ DB vc-status-list)
+    challenge.js     → nonce auth (unchanged)
+    resolver.js      → DID resolution (add native did:key/did:web)
   tools/                       # IO orchestration (imperative shell)
     resolve / verify / issue / delegate / auth / verifyChain
-  documentLoader.ts            # NEW — cached JSON-LD context loader (required by Data Integrity)
+  core/documentLoader.js       # NEW (Phase 1) — cached JSON-LD context loader (required by Data Integrity)
 ```
 
 **New concern: JSON-LD document loader.** `@digitalbazaar/vc` needs a document
@@ -133,31 +141,32 @@ Code-level: spec-section citations in comments at each enforcement point
 - Confirm document-loader pattern and exact package versions.
 - **Exit:** one green end-to-end Data Integrity issue→verify before refactoring.
 
-### Phase 0.5 — TypeScript → JavaScript + JSDoc conversion
-DB house style is plain JS + JSDoc. The repo is currently all `.ts`. Convert
-**before** the lib swap so the swap lands in the target language, not twice.
-- `.ts` → `.js`; replace TS types/interfaces with JSDoc `@typedef`/`@param`/
-  `@returns`. Named input/output interfaces become `@typedef` objects.
-- Drop `tsc` build; keep type-checking via `tsc --noEmit --checkJs` against
-  JSDoc (or DB's configured checker). Update `package.json` scripts.
-- `.js` import extensions already correct (NodeNext) — no change there.
-- Tests: Jest config moves off `ts-jest`; run JS ESM directly.
-- **Exit:** all existing tests green as JS; `typecheck` passes on JSDoc.
-
-> Note: CLAUDE.md "Development Guidelines" still say TypeScript strict mode —
-> update to "JS + JSDoc" as part of this phase.
+### Phase 0.5 — TypeScript → JavaScript + JSDoc conversion ✅ DONE
+DB house style is plain JS + JSDoc. Converted **before** the lib swap so the
+swap lands in the target language, not twice. (Commit: "Initialize repo as
+JavaScript + JSDoc on lib/ layout.")
+- ✅ `.ts` → `.js`; TS types/interfaces replaced with JSDoc `@typedef`/`@param`/
+  `@returns`.
+- ✅ Dropped `tsc` build; type-check via `tsc --noEmit --checkJs`. Removed
+  `ts-jest` and `tsx`; Jest runs native ESM `.js` directly.
+- ✅ Source root renamed `src/` → `lib/`, split into `lib/core/` (pure) and
+  `lib/tools/` (IO orchestration).
+- ✅ Unused `jose` dependency removed.
+- ✅ CLAUDE.md "Development Guidelines" updated to JS + JSDoc.
+- **Exit met:** typecheck passes on both workspaces; 117 tests pass, 3 network
+  integration tests skipped behind `INTEGRATION=true`.
 
 ### Phase 1 — DB-stack swap (TDD, lib-by-lib)
 Order chosen so each layer rests on a tested one below it:
-1. `crypto.ts` → `ed25519-multikey`. Red/green against existing crypto tests.
-2. `documentLoader.ts` (new) + cached contexts.
-3. `vc.ts` → `@digitalbazaar/vc` Data Integrity. Keep hand-rolled JWT path
+1. `core/crypto.js` → `ed25519-multikey`. Red/green against existing crypto tests.
+2. `core/documentLoader.js` (new) + cached contexts.
+3. `core/vc.js` → `@digitalbazaar/vc` Data Integrity. Keep hand-rolled JWT path
    *only* behind an explicit `legacyJwt` flag = the L1 nod.
-4. `resolver.ts` → native `did:key`/`did:web` + Universal Resolver fallback.
-5. `chain.ts` re-based on DB-verified links.
-6. Reconcile `revocation.ts` with DB status-list conventions.
+4. `core/resolver.js` → native `did:key`/`did:web` + Universal Resolver fallback.
+5. `core/chain.js` re-based on DB-verified links.
+6. Reconcile `core/revocation.js` with DB status-list conventions.
 7. Tools: rewire internals; MCP schemas largely unchanged.
-- **Exit:** all tests green on DB stack; `jose` + `@noble` removed.
+- **Exit:** all tests green on DB stack; `@noble` removed (`jose` already gone).
 
 ### Phase 1.5 — Reference-impl polish
 - `REQUIREMENTS.md` + `docs/L1.md` + `docs/L2.md`.
