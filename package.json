@@ -1,0 +1,12 @@
+{
+  "name": "agent-credential-server",
+  "private": true,
+  "workspaces": [
+    "mcp-server",
+    "demo-agent"
+  ],
+  "scripts": {
+    "test": "npm run test --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}
