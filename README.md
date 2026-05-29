@@ -1,6 +1,6 @@
 > **WIP — will change substantially.**
 
-# did-resolver-agent
+# agent-credential-server
 
 **Agent authorization without a central authority.**
 
@@ -55,6 +55,11 @@ MCP Server
 Two npm workspace packages:
 - `mcp-server/` - MCP server exposing DID/VC tools
 - `demo-agent/` - Claude-powered CLI demo of deployment authorization
+
+Within `mcp-server/lib/`, pure side-effect-free logic lives in `core/`
+(`crypto`, `vc`, `chain`, `claimPredicates`, `revocation`, `challenge`,
+`resolver`) and IO orchestration lives in `tools/` (the MCP tool handlers).
+Tools compose core functions as a thin imperative shell.
 
 ---
 
