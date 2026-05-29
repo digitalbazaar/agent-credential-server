@@ -135,11 +135,22 @@ Code-level: spec-section citations in comments at each enforcement point
 
 ## 6. Phased plan
 
-### Phase 0 — De-risk (before touching working code)
-- Spike: issue + verify one **VC 2.0** credential with `@digitalbazaar/vc` +
-  `eddsa-rdfc-2022` + a `did:key` issuer, end to end, in a scratch file.
-- Confirm document-loader pattern and exact package versions.
-- **Exit:** one green end-to-end Data Integrity issue→verify before refactoring.
+### Phase 0 — De-risk (before touching working code) ✅ DONE
+- ✅ Spike: issue + verify one **VC 2.0** credential with `@digitalbazaar/vc` +
+  `eddsa-rdfc-2022` + a `did:key` issuer, end to end
+  (`mcp-server/spikes/data-integrity.mjs` → `VERIFIED: true`).
+- ✅ Confirmed package versions: `vc@7.3.0`, `data-integrity@2.5.0`,
+  `eddsa-rdfc-2022-cryptosuite@1.3.0`, `ed25519-multikey@1.3.1`,
+  `did-method-key@5.3.0`.
+- ✅ Confirmed document-loader pattern: cached `Map`, no network for `did:key`,
+  return `driver.get()` output directly (it is *not* wrapped as `{didDocument}`).
+- **Findings to carry into Phase 1:**
+  1. Claim terms MUST be defined in `@context` — JSON-LD safe mode rejects bare
+     properties like `over_21`. `vc.js` needs a published claim context.
+  2. `did:key` driver `get({url})` returns the document (or resolved
+     verification method for `#fragment` URLs) unwrapped.
+- **Exit met:** one green end-to-end Data Integrity issue→verify; all existing
+  tests still pass (117 passed, 3 integration skipped); typecheck clean.
 
 ### Phase 0.5 — TypeScript → JavaScript + JSDoc conversion ✅ DONE
 DB house style is plain JS + JSDoc. Converted **before** the lib swap so the
