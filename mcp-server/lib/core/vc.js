@@ -5,7 +5,7 @@
  * Pure VC logic: issue, parse, verify JWT-format VCs.
  * No IO — testable in isolation.
  */
-import { sign, verify, toBase64url, fromBase64url } from "./crypto.js";
+import {fromBase64url, sign, toBase64url, verify} from './crypto.js';
 
 /**
  * @typedef {import("./crypto.js").KeyPair} KeyPair
@@ -24,7 +24,7 @@ import { sign, verify, toBase64url, fromBase64url } from "./crypto.js";
 
 /**
  * @typedef {object} VerifiableCredential
- * @property {string} jwt JWT string
+ * @property {string} jwt JWT string.
  */
 
 /**
@@ -38,11 +38,11 @@ import { sign, verify, toBase64url, fromBase64url } from "./crypto.js";
 
 /**
  * @typedef {object} VCPayload
- * @property {string} iss issuer DID
- * @property {string} sub subject DID (agent)
- * @property {number} iat issued-at (unix seconds)
- * @property {number} [exp] expiry (unix seconds)
- * @property {string | string[]} [aud] audience restriction
+ * @property {string} iss Issuer DID.
+ * @property {string} sub Subject DID (agent).
+ * @property {number} iat Issued-at (unix seconds).
+ * @property {number} [exp] Expiry (unix seconds).
+ * @property {string | string[]} [aud] Audience restriction.
  * @property {{
  *   "@context": string[],
  *   type: string[],
@@ -62,29 +62,32 @@ import { sign, verify, toBase64url, fromBase64url } from "./crypto.js";
  */
 
 /**
- * @param {unknown} obj
- * @returns {string}
+ * @param {unknown} obj - The value to encode as a JWT part.
+ * @returns {string} The base64url-encoded JSON.
  */
 function encodeJwtPart(obj) {
   return toBase64url(new TextEncoder().encode(JSON.stringify(obj)));
 }
 
 /**
- * @param {string} part
- * @returns {unknown}
+ * @param {string} part - The base64url-encoded JWT part.
+ * @returns {unknown} The decoded JSON value.
  */
 function decodeJwtPart(part) {
   return JSON.parse(new TextDecoder().decode(fromBase64url(part)));
 }
 
 /**
- * @param {string} subjectDid
- * @param {VCClaims} claims
- * @param {string} issuerDid
- * @param {KeyPair} keyPair
- * @param {number} [expiresInSeconds]
- * @param {{audience?: string | string[], credentialStatus?: CredentialStatus}} [options]
- * @returns {Promise<VerifiableCredential>}
+ * @param {string} subjectDid - The subject (agent) DID.
+ * @param {VCClaims} claims - The claims to embed in the credential subject.
+ * @param {string} issuerDid - The issuer DID.
+ * @param {KeyPair} keyPair - The issuer's Ed25519 key pair.
+ * @param {number} [expiresInSeconds] - Lifetime in seconds; omit for no expiry.
+ * @param {{
+ *   audience?: string | string[],
+ *   credentialStatus?: CredentialStatus
+ * }} [options] - Optional audience restriction and credential status.
+ * @returns {Promise<VerifiableCredential>} The signed JWT-format credential.
  */
 export async function issueCredential(
   subjectDid,
@@ -100,17 +103,19 @@ export async function issueCredential(
     iss: issuerDid,
     sub: subjectDid,
     iat: now,
-    ...(expiresInSeconds ? { exp: now + expiresInSeconds } : {}),
-    ...(options?.audience ? { aud: options.audience } : {}),
+    ...(expiresInSeconds ? {exp: now + expiresInSeconds} : {}),
+    ...(options?.audience ? {aud: options.audience} : {}),
     vc: {
-      "@context": ["https://www.w3.org/2018/credentials/v1"],
-      type: ["VerifiableCredential"],
-      credentialSubject: { id: subjectDid, ...claims },
-      ...(options?.credentialStatus ? { credentialStatus: options.credentialStatus } : {}),
-    },
+      '@context': ['https://www.w3.org/2018/credentials/v1'],
+      type: ['VerifiableCredential'],
+      credentialSubject: {id: subjectDid, ...claims},
+      ...(options?.credentialStatus ?
+        {credentialStatus: options.credentialStatus} :
+        {})
+    }
   };
 
-  const header = encodeJwtPart({ alg: "EdDSA", typ: "JWT" });
+  const header = encodeJwtPart({alg: 'EdDSA', typ: 'JWT'});
   const body = encodeJwtPart(payload);
   const signingInput = `${header}.${body}`;
   const sigBytes = await sign(
@@ -119,16 +124,18 @@ export async function issueCredential(
   );
 
   const jwt = `${signingInput}.${toBase64url(sigBytes)}`;
-  return { jwt };
+  return {jwt};
 }
 
 /**
- * @param {string} jwt
- * @returns {VCPayload | null}
+ * @param {string} jwt - The JWT-format credential.
+ * @returns {VCPayload | null} The decoded payload, or null if malformed.
  */
 export function parseCredential(jwt) {
-  const parts = jwt.split(".");
-  if (parts.length !== 3) return null;
+  const parts = jwt.split('.');
+  if(parts.length !== 3) {
+    return null;
+  }
   try {
     return /** @type {VCPayload} */ (decodeJwtPart(parts[1]));
   } catch {
@@ -140,15 +147,15 @@ export function parseCredential(jwt) {
  * Verify a VC JWT against a raw Ed25519 public key.
  * Caller is responsible for fetching the public key from the DID document.
  *
- * @param {string} jwt
- * @param {Uint8Array} publicKey
- * @param {string} [expectedAudience]
- * @returns {Promise<VerifyResult>}
+ * @param {string} jwt - The JWT-format credential to verify.
+ * @param {Uint8Array} publicKey - The issuer's Ed25519 public key.
+ * @param {string} [expectedAudience] - If set, the VC must include this aud.
+ * @returns {Promise<VerifyResult>} The verification result.
  */
 export async function verifyCredentialJwt(jwt, publicKey, expectedAudience) {
-  const parts = jwt.split(".");
-  if (parts.length !== 3) {
-    return { valid: false, reason: "Malformed JWT" };
+  const parts = jwt.split('.');
+  if(parts.length !== 3) {
+    return {valid: false, reason: 'Malformed JWT'};
   }
 
   const [header, body, sigStr] = parts;
@@ -159,47 +166,62 @@ export async function verifyCredentialJwt(jwt, publicKey, expectedAudience) {
   try {
     payload = /** @type {VCPayload} */ (decodeJwtPart(body));
   } catch {
-    return { valid: false, reason: "Cannot decode JWT payload" };
+    return {valid: false, reason: 'Cannot decode JWT payload'};
   }
 
   const sigBytes = fromBase64url(sigStr);
   const signingBytes = new TextEncoder().encode(signingInput);
   const valid = await verify(signingBytes, sigBytes, publicKey);
 
-  if (!valid) {
-    return { valid: false, reason: "Signature verification failed" };
+  if(!valid) {
+    return {valid: false, reason: 'Signature verification failed'};
   }
 
   const now = Math.floor(Date.now() / 1000);
-  if (payload.exp !== undefined && payload.exp < now) {
+  if(payload.exp !== undefined && payload.exp < now) {
     return {
       valid: false,
       issuer: payload.iss,
       subject: payload.sub,
-      reason: `Credential expired at ${new Date(payload.exp * 1000).toISOString()}`,
+      reason: 'Credential expired at ' +
+        `${new Date(payload.exp * 1000).toISOString()}`
     };
   }
 
-  if (expectedAudience !== undefined) {
+  if(expectedAudience !== undefined) {
     const aud = payload.aud;
-    if (!aud) {
-      return { valid: false, issuer: payload.iss, subject: payload.sub, reason: "VC has no audience but expectedAudience was set" };
+    if(!aud) {
+      return {
+        valid: false,
+        issuer: payload.iss,
+        subject: payload.sub,
+        reason: 'VC has no audience but expectedAudience was set'
+      };
     }
     const audArray = Array.isArray(aud) ? aud : [aud];
-    if (!audArray.includes(expectedAudience)) {
-      return { valid: false, issuer: payload.iss, subject: payload.sub, reason: `Audience mismatch: expected '${expectedAudience}' not in ${JSON.stringify(aud)}` };
+    if(!audArray.includes(expectedAudience)) {
+      return {
+        valid: false,
+        issuer: payload.iss,
+        subject: payload.sub,
+        reason: `Audience mismatch: expected '${expectedAudience}' ` +
+          `not in ${JSON.stringify(aud)}`
+      };
     }
   }
 
-  const { id: _id, ...claims } = payload.vc.credentialSubject;
+  // claims are every credentialSubject field except the subject's id
+  /** @type {VCClaims & {id?: string}} */
+  const claims = {...payload.vc.credentialSubject};
+  delete claims.id;
 
   return {
     valid: true,
     issuer: payload.iss,
     subject: payload.sub,
     claims,
-    expires: payload.exp
-      ? new Date(payload.exp * 1000).toISOString()
-      : null,
+    expires: payload.exp ?
+      new Date(payload.exp * 1000).toISOString() :
+      null
   };
 }
