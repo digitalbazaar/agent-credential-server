@@ -6,7 +6,12 @@
     "demo-agent"
   ],
   "scripts": {
+    "lint": "eslint .",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
+  },
+  "devDependencies": {
+    "@digitalbazaar/eslint-config": "^8.0.1",
+    "eslint": "^9.39.4"
   }
 }

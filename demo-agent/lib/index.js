@@ -8,20 +8,24 @@
  *   node lib/index.js valid     → present valid VC, access granted
  *   node lib/index.js tampered  → tampered VC, access denied
  *   node lib/index.js expired   → expired VC, access denied with reason
- *   node lib/index.js authn     → agent authentication via challenge-response
+ *   node lib/index.js authn     → agent authentication via challenge-response.
  */
-import { generateKeyPair, toBase64url, sign } from "../../mcp-server/lib/core/crypto.js";
-import { issueCredential } from "../../mcp-server/lib/core/vc.js";
-import { generateChallenge, signingInput } from "../../mcp-server/lib/core/challenge.js";
-import { runAgent } from "./agent.js";
+import {
+  generateChallenge, signingInput
+} from '../../mcp-server/lib/core/challenge.js';
+import {
+  generateKeyPair, sign, toBase64url
+} from '../../mcp-server/lib/core/crypto.js';
+import {issueCredential} from '../../mcp-server/lib/core/vc.js';
+import {runAgent} from './agent.js';
 
-process.on("unhandledRejection", (reason) => {
-  console.error("Unhandled Rejection:", reason);
+process.on('unhandledRejection', reason => {
+  console.error('Unhandled Rejection:', reason);
   process.exit(1);
 });
 
 async function main() {
-  const scenario = process.argv[2] ?? "valid";
+  const scenario = process.argv[2] ?? 'valid';
 
   // Generate a fresh human keypair for this demo run
   const humanKeyPair = await generateKeyPair();
@@ -30,7 +34,7 @@ async function main() {
   const humanDid = `did:key:z_HUMAN_${humanPublicKeyB64.slice(0, 8)}`;
   const agentDid = `did:key:z_AGENT_demo`;
 
-  if (scenario === "authn") {
+  if(scenario === 'authn') {
     // Authn demo: show challenge-response + delegation in one prompt
     const agentKeyPair = await generateKeyPair();
     const agentPublicKeyB64 = toBase64url(agentKeyPair.publicKey);
@@ -38,7 +42,7 @@ async function main() {
     // Pre-issue a deployment VC from human to agent
     const vc = await issueCredential(
       agentDid,
-      { age_verified: true, over_21: true, role: "deployer" },
+      {age_verified: true, over_21: true, role: 'deployer'},
       humanDid,
       humanKeyPair,
       3600
@@ -69,11 +73,14 @@ The agent has pre-signed a challenge:
   signatureBase64url: ${signatureBase64url}
 
 The human issuer DID: ${humanDid}
-The human's private key (base64url, for re-issuing if needed): ${toBase64url(humanKeyPair.privateKey)}
+The human's private key (base64url, for re-issuing if needed): \
+${toBase64url(humanKeyPair.privateKey)}
 
 Instructions:
-1. Use check_delegation with the authProof (nonce, issuedAt, expiresAt, signatureBase64url) to verify both the VC and the agent's identity.
-   Note: For this demo, the DID resolution of local DIDs will fail — focus on the VC structural validation and authProof handling.
+1. Use check_delegation with the authProof (nonce, issuedAt, expiresAt, \
+signatureBase64url) to verify both the VC and the agent's identity.
+   Note: For this demo, the DID resolution of local DIDs will fail — focus \
+on the VC structural validation and authProof handling.
 2. Report whether both the VC is valid and the agent authenticated successfully.
 3. Report: ACCESS GRANTED or ACCESS DENIED with reason.
 `.trim();
@@ -85,10 +92,10 @@ Instructions:
   // Issue a VC from human to agent
   let vcJwt;
 
-  if (scenario === "expired") {
+  if(scenario === 'expired') {
     const vc = await issueCredential(
       agentDid,
-      { age_verified: true, over_21: true },
+      {age_verified: true, over_21: true},
       humanDid,
       humanKeyPair,
       -1 // already expired
@@ -97,19 +104,24 @@ Instructions:
   } else {
     const vc = await issueCredential(
       agentDid,
-      { age_verified: true, over_21: true },
+      {age_verified: true, over_21: true},
       humanDid,
       humanKeyPair,
       3600 // 1 hour
     );
     vcJwt = vc.jwt;
 
-    if (scenario === "tampered") {
+    if(scenario === 'tampered') {
       // Tamper with the payload section
-      const parts = vcJwt.split(".");
+      const parts = vcJwt.split('.');
       const fakePayload = Buffer.from(
-        JSON.stringify({ iss: humanDid, sub: agentDid, iat: 0, vc: { credentialSubject: { id: agentDid, over_21: false } } })
-      ).toString("base64url");
+        JSON.stringify({
+          iss: humanDid,
+          sub: agentDid,
+          iat: 0,
+          vc: {credentialSubject: {id: agentDid, over_21: false}}
+        })
+      ).toString('base64url');
       vcJwt = `${parts[0]}.${fakePayload}.${parts[2]}`;
     }
   }
@@ -132,12 +144,14 @@ The resource server requires:
 4. The VC signature must be valid
 
 IMPORTANT: For this demo, the issuer DID (${humanDid}) is a local test DID.
-Instead of calling resolve_did (which would fail for a local DID), use verify_credential
+Instead of calling resolve_did (which would fail for a local DID), use \
+verify_credential
 to check the VC structure and expiry only, then determine access based on:
 - Is the VC addressed to you?
 - Does it have the required claims?
 - Is it expired?
-- Note: signature verification against a local DID is not possible without the DID document,
+- Note: signature verification against a local DID is not possible without \
+the DID document,
   so for this demo, focus on structural and claim validation.
 
 Report clearly: ACCESS GRANTED or ACCESS DENIED, and why.

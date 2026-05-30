@@ -6,7 +6,7 @@
  * IO boundary — mocked in tests.
  */
 
-const UNIVERSAL_RESOLVER_BASE = "https://dev.uniresolver.io/1.0/identifiers";
+const UNIVERSAL_RESOLVER_BASE = 'https://dev.uniresolver.io/1.0/identifiers';
 
 /**
  * @typedef {object} VerificationMethod
@@ -33,21 +33,21 @@ const UNIVERSAL_RESOLVER_BASE = "https://dev.uniresolver.io/1.0/identifiers";
  */
 
 /**
- * @param {string} did
- * @returns {Promise<ResolutionResult>}
+ * @param {string} did - The DID to resolve.
+ * @returns {Promise<ResolutionResult>} The resolution result with DID document.
  */
 export async function resolveDID(did) {
   const url = `${UNIVERSAL_RESOLVER_BASE}/${encodeURIComponent(did)}`;
   const res = await fetch(url, {
-    headers: { Accept: "application/json" },
+    headers: {Accept: 'application/json'}
   });
 
-  if (!res.ok) {
+  if(!res.ok) {
     return {
       didDocument: null,
       didResolutionMetadata: {
-        error: `HTTP ${res.status}: ${res.statusText}`,
-      },
+        error: `HTTP ${res.status}: ${res.statusText}`
+      }
     };
   }
 
