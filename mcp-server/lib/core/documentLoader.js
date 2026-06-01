@@ -3,8 +3,8 @@
  */
 /**
  * JSON-LD document loader for Data Integrity issue/verify.
- * No IO of its own — the network is an injected dependency. did:key
- * resolution and the bundled @context documents are deterministic and offline,
+ * No IO of its own — the network is an injected dependency. The did:key
+ * resolution and the bundled context documents are deterministic and offline,
  * so this core module stays testable in isolation; only the injected
  * fallbackLoader may perform IO, and the tool layer decides what that is.
  */
@@ -55,7 +55,7 @@ export const AGENT_CREDENTIAL_CONTEXT = Object.freeze({
  *   get({url}) returns a DID document (or verification method for #fragment
  *   URLs) directly.
  * @property {DocumentLoader} [fallbackLoader] - Loader for URLs this loader
- *   does not handle natively (e.g. other @context documents). May perform IO.
+ *   does not handle natively, such as other context documents; may perform IO.
  */
 
 // Locally bundled @context documents, keyed by URL, served without network.
