@@ -38,11 +38,18 @@ server.registerTool(
   'verify_credential',
   {
     description:
-      'Verify a JWT-format Verifiable Credential against the issuer DID',
-    inputSchema: {vcJwt: z.string().describe('The JWT-encoded VC')}
+      'Verify a VC 2.0 Data Integrity credential against the issuer DID',
+    inputSchema: {
+      credential: z.record(z.string(), z.unknown())
+        .describe('The VC 2.0 credential object (with proof)')
+    }
   },
-  async ({vcJwt}) => {
-    const result = await verifyCredentialTool(vcJwt);
+  async ({credential}) => {
+    const result = await verifyCredentialTool(
+      /** @type {import("./tools/verify.js").DataIntegrityCredential} */ (
+        credential
+      )
+    );
     return {content: [{type: 'text', text: JSON.stringify(result, null, 2)}]};
   }
 );
@@ -50,20 +57,19 @@ server.registerTool(
 server.registerTool(
   'issue_credential',
   {
-    description: 'Issue a signed JWT Verifiable Credential (Ed25519)',
+    description:
+      'Issue a VC 2.0 Data Integrity credential (Ed25519, eddsa-rdfc-2022). ' +
+      'The issuer did:key is derived from the signing key.',
     inputSchema: {
       subjectDid: z.string(),
       claims: z.record(z.string(), z.unknown())
         .describe('Claims to embed in the VC'),
-      issuerDid: z.string(),
       privateKeyBase64url: z.string()
-        .describe('Base64url Ed25519 private key (32 bytes)'),
+        .describe('Base64url Ed25519 seed (32 bytes); issuer DID is derived'),
       expiresInSeconds: z.number().optional()
         .describe('Optional TTL in seconds'),
-      audience: z.union([z.string(), z.array(z.string())]).optional()
-        .describe('Optional audience restriction'),
       delegatedFrom: z.string().optional()
-        .describe('Optional parent VC JWT hash for delegation chains')
+        .describe('Optional parent VC reference for delegation chains')
     }
   },
   async input => {
@@ -79,14 +85,13 @@ server.registerTool(
     inputSchema: {
       agentDid: z.string(),
       requestedAction: z.string(),
-      vcJwt: z.string(),
+      credential: z.record(z.string(), z.unknown())
+        .describe('The VC 2.0 credential object (with proof)'),
       requiredClaims: z.record(z.string(), z.unknown()).optional()
         .describe(
           'Key/value pairs or predicate objects that must be present in ' +
           'the VC claims'
         ),
-      expectedAudience: z.string().optional()
-        .describe('Expected audience value in the VC'),
       authProof: z.object({
         nonce: z.string(),
         issuedAt: z.number(),

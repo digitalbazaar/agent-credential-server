@@ -1,54 +1,28 @@
 /*!
  * Copyright (c) 2026 Digital Bazaar, Inc.
  */
-import {parseCredential, verifyCredentialJwt} from '../core/vc.js';
 import {fromBase64url} from '../core/crypto.js';
-import {resolveDID} from '../core/resolver.js';
+import {makeDocumentLoader} from './didKeyContext.js';
+import {verifyCredentialDI} from '../core/vc.js';
 
 /**
- * @typedef {import("../core/vc.js").VerifyResult} VerifyResult
- */
-/**
+ * @typedef {import("../core/vc.js").VerifyDIResult} VerifyDIResult
+ * @typedef {import("../core/vc.js").DataIntegrityCredential}
+ *   DataIntegrityCredential
  * @typedef {import("../core/resolver.js").VerificationMethod}
  *   VerificationMethod
  */
 
 /**
- * Verify a VC JWT by:
- * 1. Parsing the JWT to find the issuer DID
- * 2. Resolving the issuer DID document
- * 3. Extracting the Ed25519 public key
- * 4. Verifying the JWT signature.
+ * Verify a VC 2.0 Data Integrity credential. The issuer DID is resolved by the
+ * document loader (offline for did:key), so the proof is checked against the
+ * issuer's published key.
  *
- * @param {string} jwt - The JWT-encoded Verifiable Credential to verify.
- * @returns {Promise<VerifyResult>} The verification result.
+ * @param {DataIntegrityCredential} credential - The credential to verify.
+ * @returns {Promise<VerifyDIResult>} The verification result.
  */
-export async function verifyCredentialTool(jwt) {
-  const payload = parseCredential(jwt);
-  if(!payload) {
-    return {valid: false, reason: 'Malformed JWT'};
-  }
-
-  const resolution = await resolveDID(payload.iss);
-  if(resolution.didResolutionMetadata.error || !resolution.didDocument) {
-    return {
-      valid: false,
-      reason: 'Could not resolve issuer DID: ' +
-        `${resolution.didResolutionMetadata.error}`
-    };
-  }
-
-  const publicKey = extractEd25519Key(
-    resolution.didDocument.verificationMethod ?? []
-  );
-  if(!publicKey) {
-    return {
-      valid: false,
-      reason: 'No Ed25519 verification key found in DID document'
-    };
-  }
-
-  return verifyCredentialJwt(jwt, publicKey);
+export async function verifyCredentialTool(credential) {
+  return verifyCredentialDI({credential, documentLoader: makeDocumentLoader()});
 }
 
 /**

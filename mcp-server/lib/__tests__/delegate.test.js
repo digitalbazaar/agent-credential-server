@@ -6,82 +6,61 @@ import {jest} from '@jest/globals';
 /**
  * @typedef {import("../core/resolver.js").ResolutionResult} ResolutionResult
  * @typedef {import("../core/crypto.js").KeyPair} KeyPair
+ * @typedef {import("../core/vc.js").DataIntegrityCredential}
+ *   DataIntegrityCredential
  */
 
-// ESM-native mock — must be called before dynamic imports
+// ESM-native mock — the issuer resolves offline via did:key, but the agent
+// auth-proof path still resolves the agent DID through the Universal Resolver.
 /** @type {jest.MockedFunction<(did: string) => Promise<ResolutionResult>>} */
 const mockResolveDID = jest.fn();
 jest.unstable_mockModule('../core/resolver.js', () => ({
   resolveDID: mockResolveDID
 }));
 
-// Dynamic imports after mock registration
 const {generateKeyPair, toBase64url, sign} = await import('../core/crypto.js');
-const {issueCredential} = await import('../core/vc.js');
+const {issueCredentialTool} = await import('../tools/issue.js');
 const {checkDelegation} = await import('../tools/delegate.js');
 const {generateChallenge, signingInput} = await import('../core/challenge.js');
 
-const ISSUER_DID = 'did:key:z6MkHuman';
 const AGENT_DID = 'did:key:z6MkAgent';
 const ACTION = 'access:age-restricted-content';
 
 /**
- * Issue a test VC from the issuer to the agent.
+ * Issue a DI credential to the agent from a freshly derived did:key issuer.
+ * Returns the signed credential and the issuer's raw key for reuse.
  *
- * @param {KeyPair} kp - The issuer's key pair.
- * @param {Record<string, unknown>} [claims] - The credential subject claims.
- * @param {number} [expiresInSeconds] - Lifetime in seconds; omit for no expiry.
- * @returns {Promise<import('../core/vc.js').VerifiableCredential>} The VC.
+ * @param {object} [options] - Issuance options.
+ * @param {Record<string, unknown>} [options.claims] - The subject claims.
+ * @param {number} [options.expiresInSeconds] - TTL in seconds.
+ * @param {string} [options.subjectDid] - Override the subject DID.
+ * @returns {Promise<DataIntegrityCredential>} The signed credential.
  */
-async function makeVC(
-  kp, claims = {age_verified: true, over_21: true}, expiresInSeconds
-) {
-  return issueCredential(AGENT_DID, claims, ISSUER_DID, kp, expiresInSeconds);
-}
-
-/**
- * Stub the DID resolver to return the issuer document for the given key.
- *
- * @param {KeyPair} kp - The key pair whose public key the document exposes.
- * @returns {void}
- */
-function mockResolver(kp) {
-  const resolution = {
-    didDocument: {
-      id: ISSUER_DID,
-      verificationMethod: [
-        {
-          id: `${ISSUER_DID}#key-1`,
-          type: 'JsonWebKey2020',
-          controller: ISSUER_DID,
-          publicKeyJwk: {
-            kty: 'OKP', crv: 'Ed25519', x: toBase64url(kp.publicKey)
-          }
-        }
-      ]
-    },
-    didResolutionMetadata: {}
-  };
-  mockResolveDID.mockResolvedValue(resolution);
+async function makeVC(options = {}) {
+  const {
+    claims = {age_verified: true, over_21: true},
+    expiresInSeconds,
+    subjectDid = AGENT_DID
+  } = options;
+  const kp = await generateKeyPair();
+  return issueCredentialTool({
+    subjectDid,
+    claims,
+    privateKeyBase64url: toBase64url(kp.privateKey),
+    expiresInSeconds
+  });
 }
 
 describe('checkDelegation', () => {
-  /** @type {KeyPair} */
-  let kp;
-
-  beforeEach(async () => {
-    kp = await generateKeyPair();
-    jest.clearAllMocks();
-  });
+  beforeEach(() => jest.clearAllMocks());
 
   it('authorizes when VC is valid and all required claims satisfied',
     async () => {
-      mockResolver(kp);
-      const vc = await makeVC(kp);
+      const credential = await makeVC();
       const result = await checkDelegation({
         agentDid: AGENT_DID,
         requestedAction: ACTION,
-        vcJwt: vc.jwt,
+        credential,
         requiredClaims: {age_verified: true, over_21: true}
       });
       expect(result.authorized).toBe(true);
@@ -89,35 +68,32 @@ describe('checkDelegation', () => {
     });
 
   it('authorizes with no required claims specified', async () => {
-    mockResolver(kp);
-    const vc = await makeVC(kp);
+    const credential = await makeVC();
     const result = await checkDelegation({
       agentDid: AGENT_DID,
       requestedAction: ACTION,
-      vcJwt: vc.jwt
+      credential
     });
     expect(result.authorized).toBe(true);
   });
 
   it('denies when VC subject does not match agent DID', async () => {
-    mockResolver(kp);
-    const vc = await makeVC(kp);
+    const credential = await makeVC();
     const result = await checkDelegation({
       agentDid: 'did:key:z6MkSomeoneElse',
       requestedAction: ACTION,
-      vcJwt: vc.jwt
+      credential
     });
     expect(result.authorized).toBe(false);
     expect(result.reason).toMatch(/does not match/);
   });
 
   it('denies when required claim is missing from VC', async () => {
-    mockResolver(kp);
-    const vc = await makeVC(kp, {age_verified: true}); // no over_21
+    const credential = await makeVC({claims: {age_verified: true}});
     const result = await checkDelegation({
       agentDid: AGENT_DID,
       requestedAction: ACTION,
-      vcJwt: vc.jwt,
+      credential,
       requiredClaims: {over_21: true}
     });
     expect(result.authorized).toBe(false);
@@ -125,12 +101,11 @@ describe('checkDelegation', () => {
   });
 
   it('denies when required claim has wrong value', async () => {
-    mockResolver(kp);
-    const vc = await makeVC(kp, {over_21: false});
+    const credential = await makeVC({claims: {over_21: false}});
     const result = await checkDelegation({
       agentDid: AGENT_DID,
       requestedAction: ACTION,
-      vcJwt: vc.jwt,
+      credential,
       requiredClaims: {over_21: true}
     });
     expect(result.authorized).toBe(false);
@@ -138,118 +113,68 @@ describe('checkDelegation', () => {
   });
 
   it('denies when VC is expired', async () => {
-    mockResolver(kp);
-    const vc = await makeVC(kp, {over_21: true}, -1);
+    // expire well beyond the 300s default clock skew
+    const credential = await makeVC({
+      claims: {over_21: true}, expiresInSeconds: -3600
+    });
     const result = await checkDelegation({
       agentDid: AGENT_DID,
       requestedAction: ACTION,
-      vcJwt: vc.jwt
+      credential
     });
     expect(result.authorized).toBe(false);
-    expect(result.reason).toMatch(/expired/i);
+    expect(result.reason).toMatch(/validUntil|expired/i);
   });
 
-  it('denies when VC payload is tampered', async () => {
-    mockResolver(kp);
-    const vc = await makeVC(kp, {over_21: true});
-    const parts = vc.jwt.split('.');
-    const fakeBody = Buffer.from(
-      JSON.stringify({
-        iss: ISSUER_DID,
-        sub: AGENT_DID,
-        iat: 0,
-        vc: {credentialSubject: {id: AGENT_DID, over_21: false}}
-      })
-    ).toString('base64url');
-    const tampered = `${parts[0]}.${fakeBody}.${parts[2]}`;
+  it('denies when the credentialSubject is tampered', async () => {
+    const credential = await makeVC({claims: {over_21: true}});
+    // mutate a signed claim — the Data Integrity proof no longer verifies
+    const tampered = JSON.parse(JSON.stringify(credential));
+    tampered.credentialSubject.over_21 = false;
     const result = await checkDelegation({
       agentDid: AGENT_DID,
       requestedAction: ACTION,
-      vcJwt: tampered
+      credential: tampered
     });
     expect(result.authorized).toBe(false);
-    expect(result.reason).toMatch(/signature/i);
+    expect(result.reason).toMatch(/verif|proof|signature/i);
   });
 
-  it('denies when DID resolution fails', async () => {
-    mockResolveDID.mockResolvedValue({
-      didDocument: null,
-      didResolutionMetadata: {error: 'notFound'}
-    });
-    const vc = await makeVC(kp);
+  it('denies when the issuer is swapped to an unrelated DID', async () => {
+    const credential = await makeVC({claims: {over_21: true}});
+    // point issuer at a different did:key — the proof was made by the
+    // original key, so verification against the new issuer fails
+    const forged = JSON.parse(JSON.stringify(credential));
+    forged.issuer = 'did:key:z6Mkjchhft5cN8Eig6FxQZBm75MEXbunk8JnvNXrNWsdBg';
     const result = await checkDelegation({
       agentDid: AGENT_DID,
       requestedAction: ACTION,
-      vcJwt: vc.jwt
+      credential: forged
     });
     expect(result.authorized).toBe(false);
-    expect(result.reason).toMatch(/resolve/i);
-  });
-
-  it('denies when DID document has no Ed25519 key', async () => {
-    mockResolveDID.mockResolvedValue({
-      didDocument: {
-        id: ISSUER_DID,
-        verificationMethod: [
-          {
-            id: `${ISSUER_DID}#key-1`,
-            type: 'RsaVerificationKey2018',
-            controller: ISSUER_DID,
-            publicKeyBase58: 'someRsaKey'
-          }
-        ]
-      },
-      didResolutionMetadata: {}
-    });
-    const vc = await makeVC(kp);
-    const result = await checkDelegation({
-      agentDid: AGENT_DID,
-      requestedAction: ACTION,
-      vcJwt: vc.jwt
-    });
-    expect(result.authorized).toBe(false);
-    expect(result.reason).toMatch(/Ed25519/);
-  });
-
-  it('denies malformed JWT', async () => {
-    const result = await checkDelegation({
-      agentDid: AGENT_DID,
-      requestedAction: ACTION,
-      vcJwt: 'not.a.valid.jwt.extra'
-    });
-    expect(result.authorized).toBe(false);
-    expect(result.reason).toMatch(/malformed/i);
   });
 });
 
 describe('checkDelegation: predicate claims', () => {
-  /** @type {KeyPair} */
-  let kp;
-
-  beforeEach(async () => {
-    kp = await generateKeyPair();
-    jest.clearAllMocks();
-  });
+  beforeEach(() => jest.clearAllMocks());
 
   it('authorizes when predicate $gte is satisfied', async () => {
-    mockResolver(kp);
-    const vc = await makeVC(kp, {age: 25});
+    const credential = await makeVC({claims: {age: 25}});
     const result = await checkDelegation({
       agentDid: AGENT_DID,
       requestedAction: ACTION,
-      vcJwt: vc.jwt,
+      credential,
       requiredClaims: {age: {$gte: 21}}
     });
     expect(result.authorized).toBe(true);
   });
 
   it('denies when predicate $gte is not satisfied', async () => {
-    mockResolver(kp);
-    const vc = await makeVC(kp, {age: 18});
+    const credential = await makeVC({claims: {age: 18}});
     const result = await checkDelegation({
       agentDid: AGENT_DID,
       requestedAction: ACTION,
-      vcJwt: vc.jwt,
+      credential,
       requiredClaims: {age: {$gte: 21}}
     });
     expect(result.authorized).toBe(false);
@@ -257,12 +182,11 @@ describe('checkDelegation: predicate claims', () => {
   });
 
   it('authorizes with $in predicate', async () => {
-    mockResolver(kp);
-    const vc = await makeVC(kp, {role: 'admin'});
+    const credential = await makeVC({claims: {role: 'admin'}});
     const result = await checkDelegation({
       agentDid: AGENT_DID,
       requestedAction: ACTION,
-      vcJwt: vc.jwt,
+      credential,
       requiredClaims: {role: {$in: ['admin', 'superuser']}}
     });
     expect(result.authorized).toBe(true);
@@ -271,56 +195,45 @@ describe('checkDelegation: predicate claims', () => {
 
 describe('checkDelegation: authProof', () => {
   /** @type {KeyPair} */
-  let issuerKp;
-  /** @type {KeyPair} */
   let agentKp;
 
   beforeEach(async () => {
-    issuerKp = await generateKeyPair();
     agentKp = await generateKeyPair();
     jest.clearAllMocks();
   });
 
   /**
-   * Stub the DID resolver to map each DID to its key's document.
+   * Stub the resolver to return the agent's auth key document.
    *
-   * @param {Record<string, KeyPair>} didToKey - DID-to-key-pair mapping.
+   * @param {KeyPair} kp - The agent key pair.
    * @returns {void}
    */
-  function mockResolverForDids(didToKey) {
-    mockResolveDID.mockImplementation(async (/** @type {string} */ did) => {
-      const kp = didToKey[did];
-      if(!kp) {
-        return {didDocument: null, didResolutionMetadata: {error: 'notFound'}};
-      }
-      return {
-        didDocument: {
-          id: did,
-          verificationMethod: [{
-            id: `${did}#key-1`,
-            type: 'JsonWebKey2020',
-            controller: did,
-            publicKeyJwk: {
-              kty: 'OKP', crv: 'Ed25519', x: toBase64url(kp.publicKey)
-            }
-          }]
-        },
-        didResolutionMetadata: {}
-      };
+  function mockAgentResolver(kp) {
+    mockResolveDID.mockResolvedValue({
+      didDocument: {
+        id: AGENT_DID,
+        verificationMethod: [{
+          id: `${AGENT_DID}#key-1`,
+          type: 'JsonWebKey2020',
+          controller: AGENT_DID,
+          publicKeyJwk: {
+            kty: 'OKP', crv: 'Ed25519', x: toBase64url(kp.publicKey)
+          }
+        }]
+      },
+      didResolutionMetadata: {}
     });
   }
 
   it('authorizes when authProof is valid', async () => {
-    mockResolverForDids({[ISSUER_DID]: issuerKp, [AGENT_DID]: agentKp});
-    const vc = await issueCredential(
-      AGENT_DID, {over_21: true}, ISSUER_DID, issuerKp, 3600
-    );
+    mockAgentResolver(agentKp);
+    const credential = await makeVC({claims: {over_21: true}});
     const token = generateChallenge(AGENT_DID);
     const sigBytes = await sign(signingInput(token), agentKp.privateKey);
     const result = await checkDelegation({
       agentDid: AGENT_DID,
       requestedAction: ACTION,
-      vcJwt: vc.jwt,
+      credential,
       authProof: {
         nonce: token.nonce,
         issuedAt: token.issuedAt,
@@ -333,17 +246,14 @@ describe('checkDelegation: authProof', () => {
 
   it('denies when authProof signature is wrong', async () => {
     const wrongKp = await generateKeyPair();
-    mockResolverForDids({[ISSUER_DID]: issuerKp, [AGENT_DID]: agentKp});
-    const vc = await issueCredential(
-      AGENT_DID, {over_21: true}, ISSUER_DID, issuerKp, 3600
-    );
+    mockAgentResolver(agentKp);
+    const credential = await makeVC({claims: {over_21: true}});
     const token = generateChallenge(AGENT_DID);
-    // wrong key
     const sigBytes = await sign(signingInput(token), wrongKp.privateKey);
     const result = await checkDelegation({
       agentDid: AGENT_DID,
       requestedAction: ACTION,
-      vcJwt: vc.jwt,
+      credential,
       authProof: {
         nonce: token.nonce,
         issuedAt: token.issuedAt,
@@ -356,10 +266,8 @@ describe('checkDelegation: authProof', () => {
   });
 
   it('denies when authProof challenge is expired', async () => {
-    mockResolverForDids({[ISSUER_DID]: issuerKp, [AGENT_DID]: agentKp});
-    const vc = await issueCredential(
-      AGENT_DID, {over_21: true}, ISSUER_DID, issuerKp, 3600
-    );
+    mockAgentResolver(agentKp);
+    const credential = await makeVC({claims: {over_21: true}});
     const expiredToken = {
       nonce: 'n', agentDid: AGENT_DID, issuedAt: 100, expiresAt: 200
     };
@@ -367,7 +275,7 @@ describe('checkDelegation: authProof', () => {
     const result = await checkDelegation({
       agentDid: AGENT_DID,
       requestedAction: ACTION,
-      vcJwt: vc.jwt,
+      credential,
       authProof: {
         nonce: expiredToken.nonce,
         issuedAt: expiredToken.issuedAt,
@@ -377,5 +285,28 @@ describe('checkDelegation: authProof', () => {
     });
     expect(result.authorized).toBe(false);
     expect(result.reason).toMatch(/expired|auth/i);
+  });
+
+  it('denies when agent DID cannot be resolved for auth', async () => {
+    mockResolveDID.mockResolvedValue({
+      didDocument: null,
+      didResolutionMetadata: {error: 'notFound'}
+    });
+    const credential = await makeVC({claims: {over_21: true}});
+    const token = generateChallenge(AGENT_DID);
+    const sigBytes = await sign(signingInput(token), agentKp.privateKey);
+    const result = await checkDelegation({
+      agentDid: AGENT_DID,
+      requestedAction: ACTION,
+      credential,
+      authProof: {
+        nonce: token.nonce,
+        issuedAt: token.issuedAt,
+        expiresAt: token.expiresAt,
+        signatureBase64url: toBase64url(sigBytes)
+      }
+    });
+    expect(result.authorized).toBe(false);
+    expect(result.reason).toMatch(/resolve/i);
   });
 });

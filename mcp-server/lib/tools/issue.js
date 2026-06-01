@@ -1,57 +1,55 @@
 /*!
  * Copyright (c) 2026 Digital Bazaar, Inc.
  */
+import {deriveDidKeyIssuer, makeDidKeyDriver, makeDocumentLoader}
+  from './didKeyContext.js';
 import {fromBase64url} from '../core/crypto.js';
-import {issueCredential} from '../core/vc.js';
+import {issueCredentialDI} from '../core/vc.js';
 
 /**
  * @typedef {import("../core/vc.js").VCClaims} VCClaims
- * @typedef {import("../core/vc.js").VerifiableCredential} VerifiableCredential
+ * @typedef {import("../core/vc.js").DataIntegrityCredential}
+ *   DataIntegrityCredential
  * @typedef {import("../core/vc.js").CredentialStatus} CredentialStatus
- * @typedef {import("../core/crypto.js").KeyPair} KeyPair
  */
 
 /**
  * @typedef {object} IssueInput
- * @property {string} subjectDid
- * @property {VCClaims} claims
- * @property {string} issuerDid
- * @property {string} privateKeyBase64url Base64url-encoded Ed25519 private
- *   key (32 bytes).
+ * @property {string} subjectDid The subject (agent) DID.
+ * @property {VCClaims} claims The claims to embed.
+ * @property {string} privateKeyBase64url Base64url Ed25519 seed (32 bytes); the
+ *   issuer did:key is derived from it.
  * @property {number} [expiresInSeconds] Optional TTL in seconds.
- * @property {string | string[]} [audience] Optional audience restriction.
  * @property {string} [delegatedFrom] Optional delegation chain reference.
- * @property {CredentialStatus} [credentialStatus] Optional credential status
- *   for revocation support.
+ * @property {CredentialStatus} [credentialStatus] Optional credential status.
  */
 
 /**
- * Issue a signed JWT Verifiable Credential from the given input.
+ * Issue a VC 2.0 Data Integrity credential. The issuer did:key is derived from
+ * the signing key, so no separate issuer DID is accepted.
  *
- * @param {IssueInput} input - Subject, claims, issuer, key, and options.
- * @returns {Promise<VerifiableCredential>} The signed Verifiable Credential.
+ * @param {IssueInput} input - Subject, claims, signing key, and options.
+ * @returns {Promise<DataIntegrityCredential>} The signed credential.
  */
 export async function issueCredentialTool(input) {
+  // 1. Derive the did:key issuer (DID + signer) from the raw private key
   const privateKey = fromBase64url(input.privateKeyBase64url);
-  const {getPublicKeyAsync} = await import('@noble/ed25519');
-  const publicKey = await getPublicKeyAsync(privateKey);
-  /** @type {KeyPair} */
-  const keyPair = {privateKey, publicKey};
+  const driver = makeDidKeyDriver();
+  const {did, signer} = await deriveDidKeyIssuer(privateKey, driver);
 
-  // Inject delegatedFrom into claims if present
+  // 2. Inject delegatedFrom into claims if present
   const claims = input.delegatedFrom ?
     {...input.claims, delegatedFrom: input.delegatedFrom} :
     input.claims;
 
-  return issueCredential(
-    input.subjectDid,
+  // 3. Issue via the Data Integrity path with a did:key-aware loader
+  return issueCredentialDI({
+    issuerDid: did,
+    subjectDid: input.subjectDid,
     claims,
-    input.issuerDid,
-    keyPair,
-    input.expiresInSeconds,
-    {
-      audience: input.audience,
-      credentialStatus: input.credentialStatus
-    }
-  );
+    signer,
+    documentLoader: makeDocumentLoader(driver),
+    expiresInSeconds: input.expiresInSeconds,
+    credentialStatus: input.credentialStatus
+  });
 }

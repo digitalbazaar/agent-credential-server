@@ -1,17 +1,20 @@
 /*!
  * Copyright (c) 2026 Digital Bazaar, Inc.
  */
-import {parseCredential, verifyCredentialJwt} from '../core/vc.js';
 import {checkClaims} from '../core/claimPredicates.js';
 import {checkRevocationStatus} from '../core/revocation.js';
 import {extractEd25519Key} from './verify.js';
 import {fetchStatusList} from '../core/statusListFetcher.js';
+import {makeDocumentLoader} from './didKeyContext.js';
 import {resolveDID} from '../core/resolver.js';
 import {verifyChallengeResponse} from '../core/challenge.js';
+import {verifyCredentialDI} from '../core/vc.js';
 
 /**
  * @typedef {import("../core/claimPredicates.js").ClaimPredicate} ClaimPredicate
  * @typedef {import("../core/challenge.js").ChallengeToken} ChallengeToken
+ * @typedef {import("../core/vc.js").DataIntegrityCredential}
+ *   DataIntegrityCredential
  */
 
 /**
@@ -32,24 +35,22 @@ import {verifyChallengeResponse} from '../core/challenge.js';
  * @typedef {object} CheckDelegationInput
  * @property {string} agentDid
  * @property {string} requestedAction
- * @property {string} vcJwt JWT-format VC.
+ * @property {DataIntegrityCredential} credential The VC 2.0 credential.
  * @property {Record<string, ClaimPredicate>} [requiredClaims] Claims that
  *   must be present and satisfy predicates for authorization.
  * @property {AuthProof} [authProof] Optional agent authentication proof.
- * @property {string} [expectedAudience] Optional expected audience for the VC.
  */
 
 /**
  * Verify that an agent's VC authorizes a specific requested action.
  *
  * @param {CheckDelegationInput} input - Agent DID, action, VC, and optional
- *   required claims, auth proof, and expected audience.
+ *   required claims and auth proof.
  * @returns {Promise<DelegationResult>} Whether the action is authorized.
  */
 export async function checkDelegation(input) {
   const {
-    agentDid, requestedAction, vcJwt, requiredClaims = {}, authProof,
-    expectedAudience
+    agentDid, requestedAction, credential, requiredClaims = {}, authProof
   } = input;
 
   // 0. Verify agent auth proof if provided
@@ -94,54 +95,28 @@ export async function checkDelegation(input) {
     }
   }
 
-  // 1. Parse the VC
-  const payload = parseCredential(vcJwt);
-  if(!payload) {
-    return {authorized: false, reason: 'Malformed VC JWT'};
-  }
-
-  // 2. Check the VC is addressed to this agent
-  if(payload.sub !== agentDid) {
+  // 1. Check the VC is addressed to this agent
+  if(credential.credentialSubject.id !== agentDid) {
     return {
       authorized: false,
-      reason: `VC subject (${payload.sub}) does not match agent DID ` +
-        `(${agentDid})`
+      reason: `VC subject (${credential.credentialSubject.id}) does not ` +
+        `match agent DID (${agentDid})`
     };
   }
 
-  // 3. Resolve the issuer DID
-  const resolution = await resolveDID(payload.iss);
-  if(resolution.didResolutionMetadata.error || !resolution.didDocument) {
-    return {
-      authorized: false,
-      reason: 'Cannot resolve issuer DID: ' +
-        `${resolution.didResolutionMetadata.error}`
-    };
-  }
-
-  // 4. Extract public key + verify signature + check expiry + check audience
-  const publicKey = extractEd25519Key(
-    resolution.didDocument.verificationMethod ?? []
-  );
-  if(!publicKey) {
-    return {
-      authorized: false,
-      reason: 'No Ed25519 key found in issuer DID document'
-    };
-  }
-
-  const verifyResult = await verifyCredentialJwt(
-    vcJwt,
-    publicKey,
-    expectedAudience
-  );
+  // 2. Verify the proof, issuer, and expiry via Data Integrity. Resolution
+  //    happens inside the loader (offline for did:key issuers).
+  const verifyResult = await verifyCredentialDI({
+    credential,
+    documentLoader: makeDocumentLoader()
+  });
   if(!verifyResult.valid) {
     return {authorized: false, reason: verifyResult.reason ?? 'Invalid VC'};
   }
 
-  // 4.5. Check revocation status if credentialStatus is present
-  if(payload.vc.credentialStatus) {
-    const cs = payload.vc.credentialStatus;
+  // 3. Check revocation status if credentialStatus is present
+  if(credential.credentialStatus) {
+    const cs = credential.credentialStatus;
     const {encodedList, error} = await fetchStatusList(cs.statusListCredential);
     if(error || !encodedList) {
       return {authorized: false, reason: `Cannot fetch status list: ${error}`};
@@ -158,9 +133,10 @@ export async function checkDelegation(input) {
     }
   }
 
-  // 5. Check required claims with predicate support
-  const credentialSubject = payload.vc.credentialSubject;
-  const claimsResult = checkClaims(credentialSubject, requiredClaims);
+  // 4. Check required claims with predicate support
+  const claimsResult = checkClaims(
+    credential.credentialSubject, requiredClaims
+  );
   if(!claimsResult.satisfied) {
     return {authorized: false, reason: claimsResult.reason};
   }
@@ -168,6 +144,6 @@ export async function checkDelegation(input) {
   return {
     authorized: true,
     reason: `Agent ${agentDid} authorized for action '${requestedAction}' ` +
-      `by issuer ${payload.iss}`
+      `by issuer ${credential.issuer}`
   };
 }

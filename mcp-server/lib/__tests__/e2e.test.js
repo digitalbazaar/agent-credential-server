@@ -3,174 +3,91 @@
  */
 /**
  * End-to-end tests: full stack with no network calls.
- * Exercises keygen → issue → check_delegation in one flow.
- * Uses unstable_mockModule for ESM-compatible mocking.
+ * Exercises keygen → issue → check_delegation on the Data Integrity path.
+ * The issuer did:key resolves offline, so no resolver mock is needed.
  */
-import {jest} from '@jest/globals';
+import {generateKeyPair, toBase64url} from '../core/crypto.js';
+import {checkDelegation} from '../tools/delegate.js';
+import {issueCredentialTool} from '../tools/issue.js';
+
+const AGENT_DID = 'did:key:z6MkAgentE2E';
+const ACTION = 'access:age-restricted-content';
 
 /**
- * @typedef {import("../core/resolver.js").ResolutionResult} ResolutionResult
+ * Issue a DI credential to a subject from a fresh did:key issuer.
+ *
+ * @param {object} options - Issuance options.
+ * @param {string} options.subjectDid - The subject DID.
+ * @param {Record<string, unknown>} options.claims - The subject claims.
+ * @param {number} [options.expiresInSeconds] - TTL in seconds.
+ * @returns {Promise<import('../core/vc.js').DataIntegrityCredential>} The VC.
  */
-
-/** @type {jest.MockedFunction<() => Promise<ResolutionResult>>} */
-const mockResolveDID = jest.fn();
-jest.unstable_mockModule('../core/resolver.js', () => ({
-  resolveDID: mockResolveDID
-}));
-
-const {generateKeyPair, toBase64url} = await import('../core/crypto.js');
-const {issueCredential} = await import('../core/vc.js');
-const {checkDelegation} = await import('../tools/delegate.js');
+async function issueTo(options) {
+  const kp = await generateKeyPair();
+  return issueCredentialTool({
+    subjectDid: options.subjectDid,
+    claims: options.claims,
+    privateKeyBase64url: toBase64url(kp.privateKey),
+    expiresInSeconds: options.expiresInSeconds
+  });
+}
 
 describe('E2E: full delegation flow', () => {
-  beforeEach(() => jest.clearAllMocks());
-
   it('valid VC → ACCESS GRANTED', async () => {
-    const humanKeyPair = await generateKeyPair();
-    const humanDid = 'did:key:z6MkHumanE2E';
-    const agentDid = 'did:key:z6MkAgentE2E';
-
-    const vc = await issueCredential(
-      agentDid,
-      {age_verified: true, over_21: true},
-      humanDid,
-      humanKeyPair,
-      3600
-    );
-
-    mockResolveDID.mockResolvedValue({
-      didDocument: {
-        id: humanDid,
-        verificationMethod: [{
-          id: `${humanDid}#key-1`,
-          type: 'JsonWebKey2020',
-          controller: humanDid,
-          publicKeyJwk: {
-            kty: 'OKP',
-            crv: 'Ed25519',
-            x: toBase64url(humanKeyPair.publicKey)
-          }
-        }]
-      },
-      didResolutionMetadata: {}
+    const credential = await issueTo({
+      subjectDid: AGENT_DID,
+      claims: {age_verified: true, over_21: true},
+      expiresInSeconds: 3600
     });
-
     const result = await checkDelegation({
-      agentDid,
-      requestedAction: 'access:age-restricted-content',
-      vcJwt: vc.jwt,
+      agentDid: AGENT_DID,
+      requestedAction: ACTION,
+      credential,
       requiredClaims: {age_verified: true, over_21: true}
     });
-
     expect(result.authorized).toBe(true);
-    expect(result.reason).toMatch(agentDid);
+    expect(result.reason).toMatch(AGENT_DID);
   });
 
-  it('tampered VC → ACCESS DENIED (signature mismatch)', async () => {
-    const humanKeyPair = await generateKeyPair();
-    const humanDid = 'did:key:z6MkHumanTamper';
-    const agentDid = 'did:key:z6MkAgentTamper';
-
-    const vc = await issueCredential(
-      agentDid, {over_21: true}, humanDid, humanKeyPair, 3600
-    );
-
-    const parts = vc.jwt.split('.');
-    const fakeBody = Buffer.from(
-      JSON.stringify({
-        iss: humanDid,
-        sub: agentDid,
-        iat: 0,
-        exp: 9999999999,
-        vc: {credentialSubject: {id: agentDid, over_21: false}}
-      })
-    ).toString('base64url');
-    const tampered = `${parts[0]}.${fakeBody}.${parts[2]}`;
-
-    mockResolveDID.mockResolvedValue({
-      didDocument: {
-        id: humanDid,
-        verificationMethod: [{
-          id: `${humanDid}#key-1`,
-          type: 'JsonWebKey2020',
-          controller: humanDid,
-          publicKeyJwk: {
-            kty: 'OKP',
-            crv: 'Ed25519',
-            x: toBase64url(humanKeyPair.publicKey)
-          }
-        }]
-      },
-      didResolutionMetadata: {}
+  it('tampered VC → ACCESS DENIED (proof mismatch)', async () => {
+    const credential = await issueTo({
+      subjectDid: AGENT_DID, claims: {over_21: true}, expiresInSeconds: 3600
     });
-
+    const tampered = JSON.parse(JSON.stringify(credential));
+    tampered.credentialSubject.over_21 = false;
     const result = await checkDelegation({
-      agentDid,
-      requestedAction: 'access:age-restricted-content',
-      vcJwt: tampered
+      agentDid: AGENT_DID,
+      requestedAction: ACTION,
+      credential: tampered
     });
-
     expect(result.authorized).toBe(false);
-    expect(result.reason).toMatch(/signature/i);
+    expect(result.reason).toMatch(/verif|proof|signature/i);
   });
 
   it('expired VC → ACCESS DENIED (with expiry reason)', async () => {
-    const humanKeyPair = await generateKeyPair();
-    const humanDid = 'did:key:z6MkHumanExpired';
-    const agentDid = 'did:key:z6MkAgentExpired';
-
-    const vc = await issueCredential(
-      agentDid, {over_21: true}, humanDid, humanKeyPair, -1
-    );
-
-    mockResolveDID.mockResolvedValue({
-      didDocument: {
-        id: humanDid,
-        verificationMethod: [{
-          id: `${humanDid}#key-1`,
-          type: 'JsonWebKey2020',
-          controller: humanDid,
-          publicKeyJwk: {
-            kty: 'OKP',
-            crv: 'Ed25519',
-            x: toBase64url(humanKeyPair.publicKey)
-          }
-        }]
-      },
-      didResolutionMetadata: {}
+    const credential = await issueTo({
+      subjectDid: AGENT_DID, claims: {over_21: true}, expiresInSeconds: -3600
     });
-
     const result = await checkDelegation({
-      agentDid,
-      requestedAction: 'access:age-restricted-content',
-      vcJwt: vc.jwt
+      agentDid: AGENT_DID,
+      requestedAction: ACTION,
+      credential
     });
-
     expect(result.authorized).toBe(false);
-    expect(result.reason).toMatch(/expired/i);
+    expect(result.reason).toMatch(/validUntil|expired/i);
   });
 
   it('wrong agent presents someone else\'s VC → ACCESS DENIED', async () => {
-    const humanKeyPair = await generateKeyPair();
-    const humanDid = 'did:key:z6MkHumanWrong';
     const realAgentDid = 'did:key:z6MkRealAgent';
     const impostor = 'did:key:z6MkImpostor';
-
-    const vc = await issueCredential(
-      realAgentDid, {over_21: true}, humanDid, humanKeyPair, 3600
-    );
-
-    mockResolveDID.mockResolvedValue({
-      didDocument: {id: humanDid, verificationMethod: []},
-      didResolutionMetadata: {}
+    const credential = await issueTo({
+      subjectDid: realAgentDid, claims: {over_21: true}, expiresInSeconds: 3600
     });
-
     const result = await checkDelegation({
       agentDid: impostor,
-      requestedAction: 'access:age-restricted-content',
-      vcJwt: vc.jwt
+      requestedAction: ACTION,
+      credential
     });
-
     expect(result.authorized).toBe(false);
     expect(result.reason).toMatch(/does not match/);
   });
