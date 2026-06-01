@@ -144,7 +144,9 @@ async function callTool(name, input) {
     case 'resolve_did':
       return resolveDIDTool(/** @type {string} */ (input.did));
     case 'verify_credential':
-      return verifyCredentialTool(/** @type {string} */ (input.vcJwt));
+      // TODO: demo-agent still passes the legacy JWT shape; it is migrated to
+      // the Data Integrity credential object in a later step.
+      return verifyCredentialTool(/** @type {any} */ (input.credential));
     case 'issue_credential':
       return issueCredentialTool(/** @type {any} */ (input));
     case 'check_delegation':
