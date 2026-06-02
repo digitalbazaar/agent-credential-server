@@ -41,6 +41,8 @@ declare module '@digitalbazaar/zcap' {
     constructor(options: {
       parentCapability?: string | object;
       expectedRootCapability?: string | string[];
+      expectedTarget?: string | string[];
+      expectedAction?: string;
       suite?: unknown;
       inspectCapabilityChain?: unknown;
       _capabilityChain?: unknown;

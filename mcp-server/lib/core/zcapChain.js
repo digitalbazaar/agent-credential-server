@@ -97,9 +97,9 @@ export function createZcapDocumentLoader(input) {
  */
 
 /**
- * Assert that a delegated capability's controller is the expected agent. zcap
- * verifies the chain's cryptographic continuity but not that the leaf was
- * delegated to a specific agent DID; this closes that gap.
+ * Assert that a delegated capability's controller is the expected agent. The
+ * zcap library verifies the chain's cryptographic continuity but not that the
+ * leaf was delegated to a specific agent DID; this closes that gap.
  *
  * @param {object} input - The check parameters.
  * @param {{controller?: string}} input.capability - The leaf capability.

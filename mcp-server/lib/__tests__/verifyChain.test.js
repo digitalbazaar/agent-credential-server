@@ -1,138 +1,230 @@
 /*!
  * Copyright (c) 2026 Digital Bazaar, Inc.
  */
-import {jest} from '@jest/globals';
+import * as Ed25519Multikey from '@digitalbazaar/ed25519-multikey';
+import {buildRootCapability, createZcapDocumentLoader}
+  from '../core/zcapChain.js';
+import {CapabilityDelegation} from '@digitalbazaar/zcap';
+import {DataIntegrityProof} from '@digitalbazaar/data-integrity';
+import {cryptosuite as eddsaRdfc2022}
+  from '@digitalbazaar/eddsa-rdfc-2022-cryptosuite';
+import {driver as didKeyDriverFactory} from '@digitalbazaar/did-method-key';
+import {verifyDelegationChainTool} from '../tools/verifyChain.js';
+import jsigs from 'jsonld-signatures';
+
+const TARGET = 'https://resource.example/age-gated';
+const ACTION = 'access:age-restricted-content';
+
+const driver = didKeyDriverFactory();
+driver.use({
+  multibaseMultikeyHeader: 'z6Mk',
+  fromMultibase: Ed25519Multikey.from
+});
 
 /**
- * @typedef {import("../core/resolver.js").ResolutionResult} ResolutionResult
- * @typedef {import("../core/crypto.js").KeyPair} KeyPair
+ * Make a did:key controller with a delegation signer.
+ *
+ * @returns {Promise<{did: string, signer: object}>} The controller.
  */
-
-/** @type {jest.MockedFunction<(did: string) => Promise<ResolutionResult>>} */
-const mockResolveDID = jest.fn();
-jest.unstable_mockModule('../core/resolver.js', () => ({
-  resolveDID: mockResolveDID
-}));
-
-const {generateKeyPair, toBase64url} = await import('../core/crypto.js');
-const {issueCredential} = await import('../core/vc.js');
-const {verifyDelegationChainTool} = await import('../tools/verifyChain.js');
-
-const ROOT_DID = 'did:key:z6MkRoot';
-const MID_DID = 'did:key:z6MkMid';
-const LEAF_DID = 'did:key:z6MkLeaf';
+async function makeController() {
+  const keyPair = await Ed25519Multikey.generate();
+  const {didDocument, methodFor} = await driver.fromKeyPair({
+    verificationKeyPair: keyPair
+  });
+  const vm = methodFor({purpose: 'capabilityDelegation'});
+  keyPair.id = vm.id;
+  keyPair.controller = didDocument.id;
+  return {did: didDocument.id, signer: keyPair.signer()};
+}
 
 /**
- * @param {string} did - The DID the document resolves for.
- * @param {KeyPair} kp - The key pair whose public key is embedded.
- * @returns {ResolutionResult} A mock resolution result for the DID.
+ * Delegate a capability from a parent to a new controller.
+ *
+ * @param {object} input - Delegation parameters.
+ * @param {{id: string}} input.parent - The parent capability (root/delegated).
+ * @param {object} input.signer - The delegator's signer.
+ * @param {string} input.toController - The recipient DID.
+ * @param {string} input.expires - The expiry, ISO 8601.
+ * @param {(url: string) => Promise<unknown>} input.loader - The doc loader.
+ * @returns {Promise<Record<string, unknown> & {id: string}>} The signed zcap.
  */
-function mockDIDWithKey(did, kp) {
-  return {
-    didDocument: {
-      id: did,
-      verificationMethod: [
-        {
-          id: `${did}#key-1`,
-          type: 'JsonWebKey2020',
-          controller: did,
-          publicKeyJwk: {
-            kty: 'OKP', crv: 'Ed25519', x: toBase64url(kp.publicKey)
-          }
-        }
-      ]
-    },
-    didResolutionMetadata: {}
+async function delegate(input) {
+  const {parent, signer, toController, expires, loader} = input;
+  const zcap = {
+    '@context': ['https://w3id.org/zcap/v1'],
+    id: `urn:uuid:${crypto.randomUUID()}`,
+    parentCapability: parent.id,
+    invocationTarget: TARGET,
+    controller: toController,
+    allowedAction: ACTION,
+    expires
   };
+  const signed = await jsigs.sign(zcap, {
+    documentLoader: loader,
+    suite: new DataIntegrityProof({signer, cryptosuite: eddsaRdfc2022}),
+    purpose: new CapabilityDelegation({parentCapability: parent})
+  });
+  return /** @type {Record<string, unknown> & {id: string}} */ (signed);
 }
 
 describe('verifyDelegationChainTool', () => {
-  /** @type {KeyPair} */
-  let rootKp;
-  /** @type {KeyPair} */
-  let midKp;
-
-  beforeEach(async () => {
-    rootKp = await generateKeyPair();
-    midKp = await generateKeyPair();
-    jest.clearAllMocks();
-  });
-
   it('authorizes a valid 2-hop chain', async () => {
-    const rootVc = await issueCredential(MID_DID, {}, ROOT_DID, rootKp, 3600);
-    const midVc = await issueCredential(LEAF_DID, {}, MID_DID, midKp, 3600);
-
-    mockResolveDID.mockImplementation(async did => {
-      if(did === ROOT_DID) {
-        return mockDIDWithKey(ROOT_DID, rootKp);
-      }
-      if(did === MID_DID) {
-        return mockDIDWithKey(MID_DID, midKp);
-      }
-      return {didDocument: null, didResolutionMetadata: {error: 'notFound'}};
+    const alice = await makeController();
+    const bob = await makeController();
+    const expires = new Date(Date.now() + 3600000).toISOString();
+    const root = buildRootCapability({
+      controller: alice.did, invocationTarget: TARGET
+    });
+    const loader = createZcapDocumentLoader({
+      didKeyDriver: driver, rootCapabilities: [root]
+    });
+    const bobZcap = await delegate({
+      parent: root, signer: alice.signer, toController: bob.did, expires, loader
     });
 
     const result = await verifyDelegationChainTool({
-      vcChain: [rootVc.jwt, midVc.jwt],
-      agentDid: LEAF_DID
+      rootCapability: root,
+      delegatedCapability: bobZcap,
+      agentDid: bob.did,
+      expectedAction: ACTION,
+      expectedTarget: TARGET
     });
     expect(result.authorized).toBe(true);
-    expect(result.depth).toBe(2);
-    expect(result.chain).toHaveLength(2);
   });
 
-  it('rejects when DID resolution fails', async () => {
-    const rootVc = await issueCredential(MID_DID, {}, ROOT_DID, rootKp, 3600);
-
-    mockResolveDID.mockResolvedValue({
-      didDocument: null,
-      didResolutionMetadata: {error: 'notFound'}
+  it('authorizes a valid 3-hop chain', async () => {
+    const alice = await makeController();
+    const bob = await makeController();
+    const carol = await makeController();
+    const expires = new Date(Date.now() + 3600000).toISOString();
+    const root = buildRootCapability({
+      controller: alice.did, invocationTarget: TARGET
+    });
+    const loader = createZcapDocumentLoader({
+      didKeyDriver: driver, rootCapabilities: [root]
+    });
+    const bobZcap = await delegate({
+      parent: root, signer: alice.signer, toController: bob.did, expires, loader
+    });
+    const carolZcap = await delegate({
+      parent: bobZcap, signer: bob.signer, toController: carol.did,
+      expires, loader
     });
 
     const result = await verifyDelegationChainTool({
-      vcChain: [rootVc.jwt],
-      agentDid: MID_DID
+      rootCapability: root,
+      delegatedCapability: carolZcap,
+      agentDid: carol.did,
+      expectedAction: ACTION,
+      expectedTarget: TARGET
+    });
+    expect(result.authorized).toBe(true);
+  });
+
+  it('denies when the leaf controller is not the expected agent', async () => {
+    const alice = await makeController();
+    const bob = await makeController();
+    const expires = new Date(Date.now() + 3600000).toISOString();
+    const root = buildRootCapability({
+      controller: alice.did, invocationTarget: TARGET
+    });
+    const loader = createZcapDocumentLoader({
+      didKeyDriver: driver, rootCapabilities: [root]
+    });
+    const bobZcap = await delegate({
+      parent: root, signer: alice.signer, toController: bob.did, expires, loader
+    });
+
+    const result = await verifyDelegationChainTool({
+      rootCapability: root,
+      delegatedCapability: bobZcap,
+      agentDid: 'did:key:z6MkSomeoneElse',
+      expectedAction: ACTION,
+      expectedTarget: TARGET
     });
     expect(result.authorized).toBe(false);
-    expect(result.reason).toMatch(/resolve/i);
+    expect(result.reason).toMatch(/controller|agent|match/i);
   });
 
-  it('rejects malformed JWT in chain', async () => {
-    mockResolveDID.mockResolvedValue({
-      didDocument: null,
-      didResolutionMetadata: {}
+  it('denies a tampered delegation', async () => {
+    const alice = await makeController();
+    const bob = await makeController();
+    const expires = new Date(Date.now() + 3600000).toISOString();
+    const root = buildRootCapability({
+      controller: alice.did, invocationTarget: TARGET
     });
+    const loader = createZcapDocumentLoader({
+      didKeyDriver: driver, rootCapabilities: [root]
+    });
+    const bobZcap = await delegate({
+      parent: root, signer: alice.signer, toController: bob.did, expires, loader
+    });
+    // mutate the signed target — the delegation proof no longer verifies
+    const tampered = JSON.parse(JSON.stringify(bobZcap));
+    tampered.invocationTarget = 'https://resource.example/other';
 
     const result = await verifyDelegationChainTool({
-      vcChain: ['not.a.valid.jwt.extra'],
-      agentDid: LEAF_DID
+      rootCapability: root,
+      delegatedCapability: tampered,
+      agentDid: bob.did,
+      expectedAction: ACTION,
+      expectedTarget: TARGET
     });
     expect(result.authorized).toBe(false);
-    expect(result.reason).toMatch(/malformed/i);
   });
 
-  it('rejects empty chain', async () => {
+  it('denies when the root capability does not match', async () => {
+    const alice = await makeController();
+    const bob = await makeController();
+    const mallory = await makeController();
+    const expires = new Date(Date.now() + 3600000).toISOString();
+    const root = buildRootCapability({
+      controller: alice.did, invocationTarget: TARGET
+    });
+    // a different root the verifier will expect
+    const wrongRoot = buildRootCapability({
+      controller: mallory.did, invocationTarget: 'https://resource.example/x'
+    });
+    const loader = createZcapDocumentLoader({
+      didKeyDriver: driver, rootCapabilities: [root, wrongRoot]
+    });
+    const bobZcap = await delegate({
+      parent: root, signer: alice.signer, toController: bob.did, expires, loader
+    });
+
     const result = await verifyDelegationChainTool({
-      vcChain: [], agentDid: LEAF_DID
+      rootCapability: wrongRoot,
+      delegatedCapability: bobZcap,
+      agentDid: bob.did,
+      expectedAction: ACTION,
+      expectedTarget: TARGET
     });
     expect(result.authorized).toBe(false);
   });
 
-  it('rejects broken chain (issuer != prior subject)', async () => {
-    // Both issued by ROOT_DID — second should be issued by MID_DID
-    const rootVc = await issueCredential(MID_DID, {}, ROOT_DID, rootKp, 3600);
-    const wrongVc = await issueCredential(LEAF_DID, {}, ROOT_DID, rootKp, 3600);
-
-    mockResolveDID.mockImplementation(async did => {
-      if(did === ROOT_DID) {
-        return mockDIDWithKey(ROOT_DID, rootKp);
-      }
-      return {didDocument: null, didResolutionMetadata: {error: 'notFound'}};
+  it('denies a delegation whose expiry was extended', async () => {
+    const alice = await makeController();
+    const bob = await makeController();
+    const expires = new Date(Date.now() + 3600000).toISOString();
+    const root = buildRootCapability({
+      controller: alice.did, invocationTarget: TARGET
     });
+    const loader = createZcapDocumentLoader({
+      didKeyDriver: driver, rootCapabilities: [root]
+    });
+    const bobZcap = await delegate({
+      parent: root, signer: alice.signer, toController: bob.did, expires, loader
+    });
+    // tamper the expiry to a later time — the signed proof no longer matches
+    const tampered = JSON.parse(JSON.stringify(bobZcap));
+    tampered.expires = new Date(Date.now() + 7200000).toISOString();
 
     const result = await verifyDelegationChainTool({
-      vcChain: [rootVc.jwt, wrongVc.jwt],
-      agentDid: LEAF_DID
+      rootCapability: root,
+      delegatedCapability: tampered,
+      agentDid: bob.did,
+      expectedAction: ACTION,
+      expectedTarget: TARGET
     });
     expect(result.authorized).toBe(false);
   });

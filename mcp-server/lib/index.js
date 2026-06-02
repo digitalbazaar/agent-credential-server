@@ -148,15 +148,24 @@ server.registerTool(
   'verify_delegation_chain',
   {
     description:
-      'Verify a chain of delegation VCs from a root issuer down to an agent',
+      'Verify an authorization-capability (zcap) delegation chain from a ' +
+      'root capability down to an agent',
     inputSchema: {
-      vcChain: z.array(z.string())
-        .describe('Array of JWT VCs from root to leaf'),
-      agentDid: z.string().describe('The expected leaf agent DID')
+      rootCapability: z.record(z.string(), z.unknown())
+        .describe('The root capability the chain must descend from'),
+      delegatedCapability: z.record(z.string(), z.unknown())
+        .describe('The leaf delegated capability presented by the agent'),
+      agentDid: z.string().describe('The expected leaf agent DID'),
+      expectedAction: z.string()
+        .describe('The action the chain must allow'),
+      expectedTarget: z.string()
+        .describe('The invocation target (protected resource) URL')
     }
   },
   async input => {
-    const result = await verifyDelegationChainTool(input);
+    const result = await verifyDelegationChainTool(
+      /** @type {import("./tools/verifyChain.js").VerifyChainInput} */ (input)
+    );
     return {content: [{type: 'text', text: JSON.stringify(result, null, 2)}]};
   }
 );
