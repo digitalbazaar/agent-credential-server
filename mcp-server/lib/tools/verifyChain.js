@@ -2,76 +2,96 @@
  * Copyright (c) 2026 Digital Bazaar, Inc.
  */
 /**
- * IO boundary for delegation chain verification.
+ * IO boundary for delegation-chain verification, built on @digitalbazaar/zcap.
+ * A delegated capability embeds its parent and references the root by id, so
+ * verifying the leaf delegation against the expected root walks the whole
+ * chain cryptographically.
  */
-import {extractEd25519Key} from './verify.js';
-import {parseCredential} from '../core/vc.js';
-import {resolveDID} from '../core/resolver.js';
-import {verifyDelegationChain} from '../core/chain.js';
+import {checkLeafController, createZcapDocumentLoader}
+  from '../core/zcapChain.js';
+import {CapabilityDelegation} from '@digitalbazaar/zcap';
+import {DataIntegrityProof} from '@digitalbazaar/data-integrity';
+import {cryptosuite as eddsaRdfc2022}
+  from '@digitalbazaar/eddsa-rdfc-2022-cryptosuite';
+import jsigs from 'jsonld-signatures';
+import {makeDidKeyDriver} from './didKeyContext.js';
 
 /**
- * @typedef {import("../core/chain.js").ChainLink} ChainLink
+ * @typedef {import('../core/zcapChain.js').RootCapability} RootCapability
  */
 
 /**
- * Verify a chain of delegation VCs from a root issuer down to an agent.
+ * @typedef {object} VerifyChainInput
+ * @property {RootCapability} rootCapability - The root capability the chain
+ *   must descend from.
+ * @property {Record<string, unknown> & {controller?: string}}
+ *   delegatedCapability - The leaf delegated capability presented by the agent
+ *   (it embeds its parent chain).
+ * @property {string} agentDid - The DID that must control the leaf capability.
+ * @property {string} expectedAction - The action the chain must allow.
+ * @property {string} expectedTarget - The invocation target the chain covers.
+ */
+
+/**
+ * @typedef {object} VerifyChainResult
+ * @property {boolean} authorized
+ * @property {string} reason
+ */
+
+/**
+ * Verify a delegation chain from a root capability down to an agent.
  *
- * @param {{vcChain: string[], agentDid: string}} input - The ordered chain of
- *   JWT VCs (root to leaf) and the expected leaf agent DID.
- * @returns {Promise<{
- *   authorized: boolean,
- *   depth: number,
- *   reason: string,
- *   chain?: Array<{issuer: string, subject: string}>
- * }>} The chain verification result, including the depth reached.
+ * @param {VerifyChainInput} input - Root, leaf capability, agent, action,
+ *   target.
+ * @returns {Promise<VerifyChainResult>} Whether the chain authorizes the agent.
  */
 export async function verifyDelegationChainTool(input) {
-  const {vcChain, agentDid} = input;
+  const {
+    rootCapability, delegatedCapability, agentDid, expectedAction,
+    expectedTarget
+  } = input;
 
-  if(vcChain.length === 0) {
-    return {authorized: false, depth: 0, reason: 'Empty chain'};
+  // 1. The leaf must be delegated to the expected agent (zcap verifies chain
+  //    continuity but not the specific recipient DID).
+  const leafCheck = checkLeafController({
+    capability: delegatedCapability,
+    expectedController: agentDid
+  });
+  if(!leafCheck.valid) {
+    return {authorized: false, reason: leafCheck.reason ?? 'Wrong leaf agent'};
   }
 
-  // Resolve each issuer DID and assemble ChainLink array
-  /** @type {ChainLink[]} */
-  const links = [];
-
-  for(let i = 0; i < vcChain.length; i++) {
-    const vcJwt = vcChain[i];
-    const payload = parseCredential(vcJwt);
-    if(!payload) {
-      return {authorized: false, depth: i, reason: `Link ${i}: malformed JWT`};
-    }
-
-    const resolution = await resolveDID(payload.iss);
-    if(resolution.didResolutionMetadata.error || !resolution.didDocument) {
-      return {
-        authorized: false,
-        depth: i,
-        reason: `Link ${i}: cannot resolve issuer DID ${payload.iss}: ` +
-          `${resolution.didResolutionMetadata.error}`
-      };
-    }
-
-    const publicKey = extractEd25519Key(
-      resolution.didDocument.verificationMethod ?? []
-    );
-    if(!publicKey) {
-      return {
-        authorized: false,
-        depth: i,
-        reason: `Link ${i}: no Ed25519 key in DID document for ${payload.iss}`
-      };
-    }
-
-    links.push({vcJwt, issuerPublicKey: publicKey});
+  // 2. Verify the delegation chain: proofs, continuity, expiry attenuation,
+  //    and that it descends from the expected root.
+  const documentLoader = createZcapDocumentLoader({
+    didKeyDriver: makeDidKeyDriver(),
+    rootCapabilities: [rootCapability]
+  });
+  let result;
+  try {
+    result = await jsigs.verify(delegatedCapability, {
+      documentLoader,
+      suite: new DataIntegrityProof({cryptosuite: eddsaRdfc2022}),
+      purpose: new CapabilityDelegation({
+        suite: new DataIntegrityProof({cryptosuite: eddsaRdfc2022}),
+        expectedRootCapability: rootCapability.id,
+        expectedTarget,
+        expectedAction
+      })
+    });
+  } catch(e) {
+    const message = e instanceof Error ? e.message : String(e);
+    return {authorized: false, reason: `Chain verification threw: ${message}`};
   }
 
-  const result = await verifyDelegationChain(links, agentDid);
+  if(!result.verified) {
+    const error = result.error?.errors?.[0]?.message ??
+      result.error?.message ?? 'Delegation chain verification failed';
+    return {authorized: false, reason: error};
+  }
+
   return {
-    authorized: result.valid,
-    depth: result.depth,
-    reason: result.reason ?? `Delegation chain verified for agent ${agentDid}`,
-    chain: result.chain
+    authorized: true,
+    reason: `Delegation chain verified for agent ${agentDid}`
   };
 }
