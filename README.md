@@ -40,26 +40,28 @@ See [USE_CASES.md](./USE_CASES.md) for real-world scenarios.
 
 ```text
 Human
-│ issues VC (signed with human's DID key)
+│ issues a VC 2.0 credential (Data Integrity proof, Ed25519)
 ▼
 Agent (Claude with tool use)
 │ calls MCP tools
 ▼
 MCP Server
 ├── resolve_did → DID Document (Universal Resolver)
-├── verify_credential → {valid, issuer, subject, claims, expiry}
-├── issue_credential → signed VC (JWT, Ed25519)
-└── check_delegation → {authorized, reason}
+├── verify_credential → {valid, issuer, subject, claims}
+├── issue_credential → signed VC 2.0 credential object
+├── check_delegation → {authorized, reason}
+└── verify_delegation_chain → zcap capability-chain verification
 ```
 
 Two npm workspace packages:
 - `mcp-server/` - MCP server exposing DID/VC tools
-- `demo-agent/` - Claude-powered CLI demo of deployment authorization
+- `demo-agent/` - Claude-powered CLI demo of age-gated access control
 
 Within `mcp-server/lib/`, pure side-effect-free logic lives in `core/`
-(`crypto`, `vc`, `chain`, `claimPredicates`, `revocation`, `challenge`,
-`resolver`) and IO orchestration lives in `tools/` (the MCP tool handlers).
-Tools compose core functions as a thin imperative shell.
+(`crypto`, `vc`, `documentLoader`, `zcapChain`, `claimPredicates`,
+`revocation`, `challenge`, `resolver`) and IO orchestration lives in `tools/`
+(the MCP tool handlers). Tools compose core functions as a thin imperative
+shell.
 
 ---
 
@@ -80,40 +82,55 @@ npm run start --workspace=demo-agent -- expired   # past TTL → denied
 | Tool | Input | Output |
 |------|-------|--------|
 | `resolve_did` | `did: string` | DID Document JSON |
-| `verify_credential` | `vcJwt: string` | `{valid, issuer, subject, claims, expires}` |
-| `issue_credential` | `subjectDid, claims, issuerDid, privateKeyBase64url, expiresInSeconds?, audience?, delegatedFrom?` | `{jwt}` |
-| `check_delegation` | `agentDid, requestedAction, vcJwt, requiredClaims?, expectedAudience?, authProof?` | `{authorized, reason}` |
+| `verify_credential` | `credential` (VC 2.0 object) | `{valid, issuer, subject, claims, reason?}` |
+| `issue_credential` | `subjectDid, claims, privateKeyBase64url, expiresInSeconds?, delegatedFrom?` | signed VC 2.0 object (issuer `did:key` derived from the key) |
+| `check_delegation` | `agentDid, requestedAction, credential, requiredClaims?, authProof?` | `{authorized, reason}` |
 | `create_challenge` | `agentDid, ttlSeconds?` | `{nonce, issuedAt, expiresAt, agentDid}` |
 | `verify_auth` | `agentDid, nonce, issuedAt, signatureBase64url, expiresAt?` | `{authenticated, reason}` |
-| `verify_delegation_chain` | `vcChain: string[], agentDid` | `{authorized, depth, reason, chain?}` |
+| `verify_delegation_chain` | `rootCapability, delegatedCapability, agentDid, expectedAction, expectedTarget` | `{authorized, reason}` |
 
 ## Demo Scenario
 
-An engineer issues a short-lived deployment credential to a CI agent:
+A human issues a short-lived age-verification credential to an agent:
 
 ```json
-{ "environment": "staging", "approved_by": "did:key:z6MkEngineer", "max_replicas": 3 }
+{ "age_verified": true, "over_21": true }
 ```
 
-1. Engineer's DID signs a VC granting deploy access to staging
-2. Agent presents the VC when attempting a deployment action
-3. MCP server resolves the engineer's DID, verifies the signature, checks claims
+1. The human's DID signs a VC asserting the agent's age claims
+2. The agent presents the VC when requesting age-restricted access
+3. The MCP server verifies the credential and checks the required claims
 4. Access granted or denied - with a reason, tied to a signed credential
 
-Test cases cover the full failure surface: valid credential, tampered payload
-(signature mismatch), and expired TTL.
+Run the scenarios:
+
+```bash
+npm run start --workspace=demo-agent -- valid     # valid VC → granted
+npm run start --workspace=demo-agent -- tampered  # modified VC → denied
+npm run start --workspace=demo-agent -- expired   # past TTL → denied
+npm run start --workspace=demo-agent -- authn     # challenge-response auth
+```
+
+> **Note:** the demo-agent still uses the legacy JWT credential path; migrating
+> it to the VC 2.0 Data Integrity path the MCP server now uses is in progress.
 
 ## Stack
 
 - JavaScript (ESM) + JSDoc types / Node - **not** TypeScript (DB house style)
 - `@modelcontextprotocol/sdk` - MCP server
-- `@noble/ed25519` + `@noble/hashes` - Ed25519 signing
-- Universal Resolver - chain-agnostic DID resolution
+- `@digitalbazaar/vc` + `@digitalbazaar/data-integrity` + `eddsa-rdfc-2022` -
+  VC 2.0 credentials with Data Integrity proofs
+- `@digitalbazaar/ed25519-multikey` + `@digitalbazaar/did-method-key` - keys
+  and `did:key` resolution
+- `@digitalbazaar/zcap` - authorization-capability delegation chains
+- Universal Resolver - chain-agnostic DID resolution (fallback)
 - `@anthropic-ai/sdk` - demo agent
 
 ## References
 
 - [W3C DID Core](https://www.w3.org/TR/did-core/)
-- [W3C Verifiable Credentials](https://www.w3.org/TR/vc-data-model/)
+- [W3C Verifiable Credentials 2.0](https://www.w3.org/TR/vc-data-model-2.0/)
+- [W3C Data Integrity](https://www.w3.org/TR/vc-data-integrity/)
+- [Authorization Capabilities (zcap)](https://w3c-ccg.github.io/zcap-spec/)
 - [Universal Resolver](https://dev.uniresolver.io)
 - [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)
