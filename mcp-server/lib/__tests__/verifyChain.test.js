@@ -6,11 +6,11 @@ import {buildRootCapability, createZcapDocumentLoader}
   from '../core/zcapChain.js';
 import {CapabilityDelegation} from '@digitalbazaar/zcap';
 import {DataIntegrityProof} from '@digitalbazaar/data-integrity';
+import {driver as didKeyDriverFactory} from '@digitalbazaar/did-method-key';
 import {cryptosuite as eddsaRdfc2022}
   from '@digitalbazaar/eddsa-rdfc-2022-cryptosuite';
-import {driver as didKeyDriverFactory} from '@digitalbazaar/did-method-key';
-import {verifyDelegationChainTool} from '../tools/verifyChain.js';
 import jsigs from 'jsonld-signatures';
+import {verifyDelegationChainTool} from '../tools/verifyChain.js';
 
 const TARGET = 'https://resource.example/age-gated';
 const ACTION = 'access:age-restricted-content';

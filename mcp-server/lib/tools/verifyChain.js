@@ -10,11 +10,11 @@
 import {checkLeafController, createZcapDocumentLoader}
   from '../core/zcapChain.js';
 import {CapabilityDelegation} from '@digitalbazaar/zcap';
+import {DataIntegrityProof} from '@digitalbazaar/data-integrity';
 import {cryptosuite as eddsaRdfc2022}
   from '@digitalbazaar/eddsa-rdfc-2022-cryptosuite';
-import {DataIntegrityProof} from '@digitalbazaar/data-integrity';
-import {makeDidKeyDriver} from './didKeyContext.js';
 import jsigs from 'jsonld-signatures';
+import {makeDidKeyDriver} from './didKeyContext.js';
 
 /**
  * @typedef {import('../core/zcapChain.js').RootCapability} RootCapability
