@@ -7,9 +7,10 @@ implementation of KYA-OS: a clean, readable, spec-traced MCP-I server built on
 DB's real Verifiable Credential stack. Conformance is table stakes; readability
 and spec-traceability are the point.
 
-> Status: planning doc. **Phase 0.5 (TS→JS + JSDoc conversion) complete** — see
-> §6. Remaining phases (DB-stack swap onward) are still the artifact to review
-> before implementation.
+> Status: **Phase 1 DB-stack swap largely complete** — crypto → multikey, vc →
+> VC 2.0 Data Integrity, and the delegation chain → zcap are all merged (see
+> §6). Remaining: migrate the demo-agent off the legacy JWT path, then final
+> cleanup. §3 below is the pre–Phase-1 "before" snapshot, kept for context.
 
 ---
 
@@ -167,17 +168,31 @@ JavaScript + JSDoc on lib/ layout.")
 - **Exit met:** typecheck passes on both workspaces; 117 tests pass, 3 network
   integration tests skipped behind `INTEGRATION=true`.
 
-### Phase 1 — DB-stack swap (TDD, lib-by-lib)
-Order chosen so each layer rests on a tested one below it:
-1. `core/crypto.js` → `ed25519-multikey`. Red/green against existing crypto tests.
-2. `core/documentLoader.js` (new) + cached contexts.
-3. `core/vc.js` → `@digitalbazaar/vc` Data Integrity. Keep hand-rolled JWT path
-   *only* behind an explicit `legacyJwt` flag = the L1 nod.
-4. `core/resolver.js` → native `did:key`/`did:web` + Universal Resolver fallback.
-5. `core/chain.js` re-based on DB-verified links.
-6. Reconcile `core/revocation.js` with DB status-list conventions.
-7. Tools: rewire internals; MCP schemas largely unchanged.
-- **Exit:** all tests green on DB stack; `@noble` removed (`jose` already gone).
+### Phase 1 — DB-stack swap (staged, tests green between steps)
+Done as an **additive** migration: new DB-stack functions land alongside the
+legacy ones, consumers move over, then the dead legacy code is removed. Each
+step = its own PR.
+
+- ✅ **Step 1 — `core/crypto.js` → `ed25519-multikey`** (PR #4). Multikey-native
+  surface (`generateMultikey`, `publicKeyBytesFromMultibase`) + a raw-bytes
+  bridge so the still-JWT consumers keep working. 32-byte seed = legacy private
+  key. One `@noble` call retained in the `sign` bridge.
+- ✅ **Step 2 — `core/vc.js` → VC 2.0 Data Integrity** (PR #5). Added
+  `issueCredentialDI`/`verifyCredentialDI` + `core/documentLoader.js` (cached,
+  offline did:key + bundled contexts). Migrated the `issue`/`verify`/`delegate`
+  tools: issuer `did:key` derived from the key, `issue_credential` returns the
+  VC object, tools take credential objects. JWT issue path kept (demo-agent).
+- ✅ **Step 3 — delegation chain → `@digitalbazaar/zcap`** (PR #6). Replaced the
+  hand-rolled `delegatedFrom` chain with zcap capability chains (it accepts our
+  `eddsa-rdfc-2022` suite — single-suite throughout). Added `core/zcapChain.js`;
+  deleted `core/chain.js`. `verify_delegation_chain` is now capability-based.
+- ✅ **Cleanup (partial)** — removed the dead `verifyCredentialJwt`/
+  `parseCredential`; fixed the MCP server name.
+- ⏳ **Demo-agent → Data Integrity** — still on the legacy JWT path; migrate
+  with an eval target defined first (LLM in the runtime path).
+- ⏳ **Final cleanup** (after demo-agent): remove the last JWT function
+  (`issueCredential`) and `@noble`; reconcile `revocation.js` with DB
+  status-list; native `did:web` resolution; publish the claim context.
 
 ### Phase 1.5 — Reference-impl polish
 - `REQUIREMENTS.md` + `docs/L1.md` + `docs/L2.md`.

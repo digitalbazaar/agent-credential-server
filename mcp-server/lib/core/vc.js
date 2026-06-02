@@ -5,12 +5,12 @@
  * Pure VC logic. Two paths coexist during the Phase 1 migration:
  *   - Data Integrity (primary): issue/verify VC 2.0 with eddsa-rdfc-2022
  *     proofs via @digitalbazaar/vc.
- *   - Legacy JWT (the L1 nod): hand-rolled JWT issue/parse/verify, retained
- *     for the delegation chain until its linkage is re-based.
+ *   - Legacy JWT (the L1 nod): hand-rolled JWT issuance, retained only until
+ *     the demo-agent migrates off it.
  * No IO of its own — keys, signers, and the document loader are passed in.
  */
 import * as vcjs from '@digitalbazaar/vc';
-import {fromBase64url, sign, toBase64url, verify} from './crypto.js';
+import {sign, toBase64url} from './crypto.js';
 import {AGENT_CREDENTIAL_CONTEXT_URL} from './documentLoader.js';
 import {DataIntegrityProof} from '@digitalbazaar/data-integrity';
 import {cryptosuite as eddsaRdfc2022}
@@ -64,29 +64,11 @@ const VC2_CONTEXT_URL = 'https://www.w3.org/ns/credentials/v2';
  */
 
 /**
- * @typedef {object} VerifyResult
- * @property {boolean} valid
- * @property {string} [issuer]
- * @property {string} [subject]
- * @property {VCClaims} [claims]
- * @property {string | null} [expires]
- * @property {string} [reason]
- */
-
-/**
  * @param {unknown} obj - The value to encode as a JWT part.
  * @returns {string} The base64url-encoded JSON.
  */
 function encodeJwtPart(obj) {
   return toBase64url(new TextEncoder().encode(JSON.stringify(obj)));
-}
-
-/**
- * @param {string} part - The base64url-encoded JWT part.
- * @returns {unknown} The decoded JSON value.
- */
-function decodeJwtPart(part) {
-  return JSON.parse(new TextDecoder().decode(fromBase64url(part)));
 }
 
 /**
@@ -137,105 +119,6 @@ export async function issueCredential(
 
   const jwt = `${signingInput}.${toBase64url(sigBytes)}`;
   return {jwt};
-}
-
-/**
- * @param {string} jwt - The JWT-format credential.
- * @returns {VCPayload | null} The decoded payload, or null if malformed.
- */
-export function parseCredential(jwt) {
-  const parts = jwt.split('.');
-  if(parts.length !== 3) {
-    return null;
-  }
-  try {
-    return /** @type {VCPayload} */ (decodeJwtPart(parts[1]));
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Verify a VC JWT against a raw Ed25519 public key.
- * Caller is responsible for fetching the public key from the DID document.
- *
- * @param {string} jwt - The JWT-format credential to verify.
- * @param {Uint8Array} publicKey - The issuer's Ed25519 public key.
- * @param {string} [expectedAudience] - If set, the VC must include this aud.
- * @returns {Promise<VerifyResult>} The verification result.
- */
-export async function verifyCredentialJwt(jwt, publicKey, expectedAudience) {
-  const parts = jwt.split('.');
-  if(parts.length !== 3) {
-    return {valid: false, reason: 'Malformed JWT'};
-  }
-
-  const [header, body, sigStr] = parts;
-  const signingInput = `${header}.${body}`;
-
-  /** @type {VCPayload} */
-  let payload;
-  try {
-    payload = /** @type {VCPayload} */ (decodeJwtPart(body));
-  } catch {
-    return {valid: false, reason: 'Cannot decode JWT payload'};
-  }
-
-  const sigBytes = fromBase64url(sigStr);
-  const signingBytes = new TextEncoder().encode(signingInput);
-  const valid = await verify(signingBytes, sigBytes, publicKey);
-
-  if(!valid) {
-    return {valid: false, reason: 'Signature verification failed'};
-  }
-
-  const now = Math.floor(Date.now() / 1000);
-  if(payload.exp !== undefined && payload.exp < now) {
-    return {
-      valid: false,
-      issuer: payload.iss,
-      subject: payload.sub,
-      reason: 'Credential expired at ' +
-        `${new Date(payload.exp * 1000).toISOString()}`
-    };
-  }
-
-  if(expectedAudience !== undefined) {
-    const aud = payload.aud;
-    if(!aud) {
-      return {
-        valid: false,
-        issuer: payload.iss,
-        subject: payload.sub,
-        reason: 'VC has no audience but expectedAudience was set'
-      };
-    }
-    const audArray = Array.isArray(aud) ? aud : [aud];
-    if(!audArray.includes(expectedAudience)) {
-      return {
-        valid: false,
-        issuer: payload.iss,
-        subject: payload.sub,
-        reason: `Audience mismatch: expected '${expectedAudience}' ` +
-          `not in ${JSON.stringify(aud)}`
-      };
-    }
-  }
-
-  // claims are every credentialSubject field except the subject's id
-  /** @type {VCClaims & {id?: string}} */
-  const claims = {...payload.vc.credentialSubject};
-  delete claims.id;
-
-  return {
-    valid: true,
-    issuer: payload.iss,
-    subject: payload.sub,
-    claims,
-    expires: payload.exp ?
-      new Date(payload.exp * 1000).toISOString() :
-      null
-  };
 }
 
 // --- Data Integrity (VC 2.0) path ---

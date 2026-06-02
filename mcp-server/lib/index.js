@@ -17,7 +17,9 @@ process.on('unhandledRejection', reason => {
   process.exit(1);
 });
 
-const server = new McpServer({name: 'did-resolver-agent', version: '0.1.0'});
+const server = new McpServer({
+  name: 'agent-credential-server', version: '0.1.0'
+});
 
 server.registerTool(
   'resolve_did',
