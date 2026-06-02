@@ -8,9 +8,12 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.81",
     "@anthropic-ai/sdk": "^0.36.0",
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "mcp-server": "*"
+    "ai": "^6.0.195",
+    "mcp-server": "*",
+    "ollama-ai-provider-v2": "^3.5.1"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
