@@ -9,6 +9,9 @@
  * fallbackLoader may perform network IO, and the tool layer decides what that
  * is. The one read at module load is a static, bundled repo asset (the
  * canonical context file), equivalent to an imported constant.
+ *
+ * KYA-OS R-X-3: the document loader resolves @context without network IO on
+ * the hot path — cached, bundled contexts, and offline did:key resolution.
  */
 import {fileURLToPath} from 'node:url';
 import {readFileSync} from 'node:fs';

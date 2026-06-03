@@ -9,6 +9,9 @@
  * produce: base64url + gzip, MSB-first (left-to-right) bit indexing. We keep
  * a thin lenient wrapper so an out-of-range index is treated as not-revoked
  * instead of throwing.
+ *
+ * KYA-OS R-L2-8: revocation uses StatusList2021 semantics compatible with DB
+ * @digitalbazaar/vc-status-list.
  */
 import {decodeList} from '@digitalbazaar/vc-status-list';
 

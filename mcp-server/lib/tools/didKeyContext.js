@@ -91,6 +91,8 @@ export async function deriveDidKeyIssuer(privateKey, driver) {
  * Resolve a DID to its raw Ed25519 public key. A did:key resolves offline and
  * deterministically; other methods fall back to the Universal Resolver.
  *
+ * KYA-OS R-L1-2: did:key agent DIDs resolve offline, with no network call.
+ *
  * @param {string} did - The DID to resolve.
  * @returns {Promise<Uint8Array | null>} The raw public key, or null if it
  *   cannot be resolved.

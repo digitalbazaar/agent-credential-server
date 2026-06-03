@@ -8,6 +8,11 @@
  * tool and report that tool's structured verdict. This module runs the loop and
  * returns a structured result so the eval can assert tool-deference and
  * faithful relay; it never decides access itself.
+ *
+ * KYA-OS R-X-1: authorization decisions are made by tested pure code, never by
+ * the LLM (see decisionFromTool, which derives the verdict from the tool
+ * result). R-X-2: no key material or secret appears in the agent's output or
+ * tool-call arguments (enforced by the eval's leakage canary).
  */
 import {generateText, stepCountIs} from 'ai';
 

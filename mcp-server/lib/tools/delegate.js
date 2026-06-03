@@ -51,7 +51,9 @@ export async function checkDelegation(input) {
     agentDid, requestedAction, credential, requiredClaims = {}, authProof
   } = input;
 
-  // 0. Verify agent auth proof if provided
+  // 0. Verify agent auth proof if provided.
+  // KYA-OS R-L1-5, R-L1-6: authenticate control of the agent DID via a signed
+  // nonce challenge; reject an expired or wrongly-signed proof.
   if(authProof) {
     const agentKey = await resolveAgentKey(agentDid);
     if(!agentKey) {
@@ -80,7 +82,9 @@ export async function checkDelegation(input) {
     }
   }
 
-  // 1. Check the VC is addressed to this agent
+  // 1. Check the VC is addressed to this agent.
+  // KYA-OS R-L2-2: bind the credential to the requesting agent
+  // (credentialSubject.id MUST equal the agent DID).
   if(credential.credentialSubject.id !== agentDid) {
     return {
       authorized: false,
@@ -91,6 +95,9 @@ export async function checkDelegation(input) {
 
   // 2. Verify the proof, issuer, and expiry via Data Integrity. Resolution
   //    happens inside the loader (offline for did:key issuers).
+  // KYA-OS R-L2-3, R-L2-4, R-L2-5, R-L2-6: the proof MUST verify against the
+  // resolved issuer DID, and an expired (validUntil) or not-yet-valid
+  // (validFrom) credential MUST be denied.
   const verifyResult = await verifyCredentialDI({
     credential,
     documentLoader: makeDocumentLoader()
@@ -99,7 +106,9 @@ export async function checkDelegation(input) {
     return {authorized: false, reason: verifyResult.reason ?? 'Invalid VC'};
   }
 
-  // 3. Check revocation status if credentialStatus is present
+  // 3. Check revocation status if credentialStatus is present.
+  // KYA-OS R-L2-7: per-request revocation check; a revoked credential is
+  // denied.
   if(credential.credentialStatus) {
     const cs = credential.credentialStatus;
     const {encodedList, error} = await fetchStatusList(cs.statusListCredential);
@@ -118,7 +127,9 @@ export async function checkDelegation(input) {
     }
   }
 
-  // 4. Check required claims with predicate support
+  // 4. Check required claims with predicate support.
+  // KYA-OS R-L2-9: scoped authorization — the requested action MUST satisfy
+  // the credential's permitted claims/scope.
   const claimsResult = checkClaims(
     credential.credentialSubject, requiredClaims
   );
