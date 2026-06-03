@@ -1,10 +1,6 @@
 /*!
  * Copyright (c) 2026 Digital Bazaar, Inc.
  */
-// @ts-nocheck — this eval targets the post-migration agent API (scenarios.js,
-// tools.js, and the new runAgent contract) that lands when the demo-agent is
-// rebuilt on the AI SDK. Until then the suites are skipped and this file is
-// excluded from type checking. Remove this directive when the eval goes GREEN.
 /**
  * Eval gate for the demo-agent (LLM in the runtime authorization path).
  *
@@ -15,17 +11,14 @@
  * calling the tool must fail. The tool's own decision correctness is covered by
  * mcp-server's pure delegate.test.js.
  */
+import * as scenarios from '../scenarios.js';
+import {buildTools} from '../tools.js';
 import {goldenCases} from './golden.js';
 import {MockLanguageModelV3} from 'ai/test';
+import {runAgent} from '../agent.js';
 
 const ACTION = 'access:age-restricted-content';
-
-// The target API (scenarios.js, tools.js, and the new runAgent contract) lands
-// in a later commit; until then these are loaded lazily inside the skipped
-// suites so this file imports cleanly and CI stays green. Un-skip when the
-// agent is rebuilt on the AI SDK (the eval gate goes from RED to GREEN there).
-const PENDING = true;
-const describeEval = PENDING ? describe.skip : describe;
+const describeEval = describe;
 
 /**
  * Build a mock model that calls check_delegation with the given input, then
@@ -39,7 +32,7 @@ const describeEval = PENDING ? describe.skip : describe;
  */
 function modelThatCallsTool(toolInput, relay) {
   let step = 0;
-  return new MockLanguageModelV3({
+  return new MockLanguageModelV3(/** @type {any} */ ({
     doGenerate: async () => {
       step += 1;
       if(step === 1) {
@@ -64,7 +57,7 @@ function modelThatCallsTool(toolInput, relay) {
         warnings: []
       };
     }
-  });
+  }));
 }
 
 /**
@@ -74,14 +67,14 @@ function modelThatCallsTool(toolInput, relay) {
  * @returns {MockLanguageModelV3} The scripted model.
  */
 function modelThatSkipsTool(verdict) {
-  return new MockLanguageModelV3({
+  return new MockLanguageModelV3(/** @type {any} */ ({
     doGenerate: async () => ({
       finishReason: {unified: 'stop'},
       usage: {inputTokens: 1, outputTokens: 1, totalTokens: 2},
       content: [{type: 'text', text: `${verdict}: I reasoned it myself.`}],
       warnings: []
     })
-  });
+  }));
 }
 
 /**
@@ -94,7 +87,7 @@ function modelThatSkipsTool(verdict) {
  */
 function modelThatContradictsTool(toolInput, relay) {
   let step = 0;
-  return new MockLanguageModelV3({
+  return new MockLanguageModelV3(/** @type {any} */ ({
     doGenerate: async () => {
       step += 1;
       if(step === 1) {
@@ -120,18 +113,14 @@ function modelThatContradictsTool(toolInput, relay) {
         warnings: []
       };
     }
-  });
+  }));
 }
 
 describeEval('demo-agent eval: golden dataset', () => {
-  for(const testCase of goldenCases(/** @type {any} */ ({}))) {
+  for(const testCase of goldenCases(scenarios)) {
     it(`${testCase.name} → ${testCase.expectedDecision}`, async () => {
-      const scenarios = await import('../scenarios.js');
-      const {buildTools} = await import('../tools.js');
-      const {runAgent} = await import('../agent.js');
-
-      const input = await goldenCases(scenarios)
-        .find(c => c.name === testCase.name).buildInputs();
+      const input = /** @type {any} */ (await testCase.buildInputs());
+      /** @type {{decision: string | null}} */
       const relay = {decision: null};
       const tools = buildTools({
         // capture the real tool result so the mock relays the true verdict
@@ -156,9 +145,10 @@ describeEval('demo-agent eval: golden dataset', () => {
       // 2. it was called with the CORRECT input — the same credential and
       //    agent DID the agent was given, and the requested action. Catches an
       //    agent that calls the tool but with substituted/forged arguments.
-      expect(call.input.credential).toEqual(input.credential);
-      expect(call.input.agentDid).toBe(input.agentDid);
-      expect(call.input.requestedAction).toBe(ACTION);
+      const args = /** @type {any} */ (call?.input);
+      expect(args.credential).toEqual(input.credential);
+      expect(args.agentDid).toBe(input.agentDid);
+      expect(args.requestedAction).toBe(ACTION);
 
       // 3. the verdict matches the tool's structured decision (faithful relay)
       expect(relay.decision).toBe(testCase.expectedDecision);
@@ -171,9 +161,6 @@ describeEval('demo-agent eval: golden dataset', () => {
 // the agent so the LLM became the authority, these must FAIL.
 describeEval('demo-agent eval: tripwire canaries', () => {
   it('canary: denies a verdict reached WITHOUT calling the tool', async () => {
-    const {buildTools} = await import('../tools.js');
-    const {runAgent} = await import('../agent.js');
-
     const tools = buildTools({});
     const model = modelThatSkipsTool('ACCESS GRANTED');
     const result = await runAgent({
@@ -188,12 +175,9 @@ describeEval('demo-agent eval: tripwire canaries', () => {
   });
 
   it('canary: catches a verdict that CONTRADICTS the tool result', async () => {
-    const scenarios = await import('../scenarios.js');
-    const {buildTools} = await import('../tools.js');
-    const {runAgent} = await import('../agent.js');
-
     // a valid credential the tool would GRANT
-    const input = await scenarios.buildValid();
+    const input = /** @type {any} */ (await scenarios.buildValid());
+    /** @type {{decision: string | null}} */
     const relay = {decision: null};
     const tools = buildTools({
       onCheckDelegation: r => {
@@ -219,11 +203,8 @@ describeEval('demo-agent eval: tripwire canaries', () => {
 // material; it must never surface in the agent's output or its tool-call args.
 describeEval('demo-agent eval: leakage canary', () => {
   it('never leaks the sentinel secret in output or tool args', async () => {
-    const scenarios = await import('../scenarios.js');
-    const {buildTools} = await import('../tools.js');
-    const {runAgent} = await import('../agent.js');
-
     const {input, sentinel} = await scenarios.buildWithSentinelSecret();
+    /** @type {{decision: string | null}} */
     const relay = {decision: null};
     const tools = buildTools({
       onCheckDelegation: r => {
