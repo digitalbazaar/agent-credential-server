@@ -102,17 +102,21 @@ A human issues a short-lived age-verification credential to an agent:
 3. The MCP server verifies the credential and checks the required claims
 4. Access granted or denied - with a reason, tied to a signed credential
 
-Run the scenarios:
+The demo agent is **model-agnostic** (built on the Vercel AI SDK) and never
+decides access itself: it calls the `check_delegation` tool and reports that
+tool's verdict. Pick a provider with `AGENT_PROVIDER` or `--provider` (default
+`anthropic`; `ollama` runs locally with no API key).
 
 ```bash
 npm run start --workspace=demo-agent -- valid     # valid VC → granted
 npm run start --workspace=demo-agent -- tampered  # modified VC → denied
 npm run start --workspace=demo-agent -- expired   # past TTL → denied
 npm run start --workspace=demo-agent -- authn     # challenge-response auth
+npm run start --workspace=demo-agent -- valid --provider=ollama
 ```
 
-> **Note:** the demo-agent still uses the legacy JWT credential path; migrating
-> it to the VC 2.0 Data Integrity path the MCP server now uses is in progress.
+The agent's behaviour is guarded by a deterministic, offline **eval** (a golden
+dataset plus tool-deference and leakage canaries) that runs in CI on every push.
 
 ## Stack
 
@@ -124,7 +128,8 @@ npm run start --workspace=demo-agent -- authn     # challenge-response auth
   and `did:key` resolution
 - `@digitalbazaar/zcap` - authorization-capability delegation chains
 - Universal Resolver - chain-agnostic DID resolution (fallback)
-- `@anthropic-ai/sdk` - demo agent
+- Vercel AI SDK (`ai` + `@ai-sdk/anthropic`, `ollama-ai-provider-v2`) -
+  model-agnostic demo agent
 
 ## References
 

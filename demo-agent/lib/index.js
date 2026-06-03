@@ -5,17 +5,13 @@
  * CLI demo: age-gated access control via VC 2.0 Data Integrity credentials.
  * Provider-agnostic — pick the model with AGENT_PROVIDER or --provider.
  *
- * Usage:
- *   node lib/index.js valid                  → valid VC, access granted
- *   node lib/index.js tampered               → tampered VC, access denied
- *   node lib/index.js expired                → expired VC, access denied
- *   node lib/index.js authn                  → challenge-response + delegation
- *   node lib/index.js valid --provider=ollama
+ * Usage: `node lib/index.js <scenario> [--provider=NAME]`, where scenario is
+ * one of valid, tampered, expired, or authn.
  */
+import * as scenarios from './scenarios.js';
 import {buildTools} from './tools.js';
 import {getModel} from './providers.js';
 import {runAgent} from './agent.js';
-import * as scenarios from './scenarios.js';
 
 process.on('unhandledRejection', reason => {
   console.error('Unhandled Rejection:', reason);
@@ -80,7 +76,8 @@ async function main() {
 
   const result = await runAgent({prompt, model, tools});
 
-  console.log(`\nTools called: ${result.toolCalls.map(c => c.name).join(', ')}`);
+  const called = result.toolCalls.map(c => c.name).join(', ');
+  console.log(`\nTools called: ${called}`);
   console.log(`Decision: ${result.decision ?? 'NO DECISION'}`);
   console.log(`\nAgent: ${result.finalText}`);
 }

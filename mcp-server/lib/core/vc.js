@@ -2,22 +2,17 @@
  * Copyright (c) 2026 Digital Bazaar, Inc.
  */
 /**
- * Pure VC logic. Two paths coexist during the Phase 1 migration:
- *   - Data Integrity (primary): issue/verify VC 2.0 with eddsa-rdfc-2022
- *     proofs via @digitalbazaar/vc.
- *   - Legacy JWT (the L1 nod): hand-rolled JWT issuance, retained only until
- *     the demo-agent migrates off it.
- * No IO of its own — keys, signers, and the document loader are passed in.
+ * Pure VC logic: issue and verify VC 2.0 credentials with eddsa-rdfc-2022
+ * Data Integrity proofs via @digitalbazaar/vc. No IO of its own — the signer
+ * and document loader are passed in.
  */
 import * as vcjs from '@digitalbazaar/vc';
-import {sign, toBase64url} from './crypto.js';
 import {AGENT_CREDENTIAL_CONTEXT_URL} from './documentLoader.js';
 import {DataIntegrityProof} from '@digitalbazaar/data-integrity';
 import {cryptosuite as eddsaRdfc2022}
   from '@digitalbazaar/eddsa-rdfc-2022-cryptosuite';
 
 /**
- * @typedef {import("./crypto.js").KeyPair} KeyPair
  * @typedef {import("./documentLoader.js").DocumentLoader} DocumentLoader
  */
 
@@ -35,11 +30,6 @@ const VC2_CONTEXT_URL = 'https://www.w3.org/ns/credentials/v2';
  */
 
 /**
- * @typedef {object} VerifiableCredential
- * @property {string} jwt JWT string.
- */
-
-/**
  * @typedef {object} CredentialStatus
  * @property {string} id
  * @property {"StatusList2021Entry"} type
@@ -47,81 +37,6 @@ const VC2_CONTEXT_URL = 'https://www.w3.org/ns/credentials/v2';
  * @property {string} statusListIndex
  * @property {string} statusListCredential
  */
-
-/**
- * @typedef {object} VCPayload
- * @property {string} iss Issuer DID.
- * @property {string} sub Subject DID (agent).
- * @property {number} iat Issued-at (unix seconds).
- * @property {number} [exp] Expiry (unix seconds).
- * @property {string | string[]} [aud] Audience restriction.
- * @property {{
- *   "@context": string[],
- *   type: string[],
- *   credentialSubject: VCClaims & {id: string},
- *   credentialStatus?: CredentialStatus
- * }} vc
- */
-
-/**
- * @param {unknown} obj - The value to encode as a JWT part.
- * @returns {string} The base64url-encoded JSON.
- */
-function encodeJwtPart(obj) {
-  return toBase64url(new TextEncoder().encode(JSON.stringify(obj)));
-}
-
-/**
- * @param {string} subjectDid - The subject (agent) DID.
- * @param {VCClaims} claims - The claims to embed in the credential subject.
- * @param {string} issuerDid - The issuer DID.
- * @param {KeyPair} keyPair - The issuer's Ed25519 key pair.
- * @param {number} [expiresInSeconds] - Lifetime in seconds; omit for no expiry.
- * @param {{
- *   audience?: string | string[],
- *   credentialStatus?: CredentialStatus
- * }} [options] - Optional audience restriction and credential status.
- * @returns {Promise<VerifiableCredential>} The signed JWT-format credential.
- */
-export async function issueCredential(
-  subjectDid,
-  claims,
-  issuerDid,
-  keyPair,
-  expiresInSeconds,
-  options
-) {
-  const now = Math.floor(Date.now() / 1000);
-  /** @type {VCPayload} */
-  const payload = {
-    iss: issuerDid,
-    sub: subjectDid,
-    iat: now,
-    ...(expiresInSeconds ? {exp: now + expiresInSeconds} : {}),
-    ...(options?.audience ? {aud: options.audience} : {}),
-    vc: {
-      '@context': ['https://www.w3.org/2018/credentials/v1'],
-      type: ['VerifiableCredential'],
-      credentialSubject: {id: subjectDid, ...claims},
-      ...(options?.credentialStatus ?
-        {credentialStatus: options.credentialStatus} :
-        {})
-    }
-  };
-
-  const header = encodeJwtPart({alg: 'EdDSA', typ: 'JWT'});
-  const body = encodeJwtPart(payload);
-  const signingInput = `${header}.${body}`;
-  const sigBytes = await sign(
-    new TextEncoder().encode(signingInput),
-    keyPair.privateKey
-  );
-
-  const jwt = `${signingInput}.${toBase64url(sigBytes)}`;
-  return {jwt};
-}
-
-// --- Data Integrity (VC 2.0) path ---
 
 /**
  * A signed VC 2.0 Data Integrity credential. Uses object-literal typedef

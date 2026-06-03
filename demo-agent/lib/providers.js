@@ -6,8 +6,8 @@
  * provider-agnostic (it speaks the Vercel AI SDK's unified tool-calling
  * interface); this module maps a provider name to a concrete model.
  *
- * Anthropic and Ollama are wired up now. OpenAI and Gemini drop in later via
- * @ai-sdk/openai and @ai-sdk/google with the same shape.
+ * Anthropic and Ollama are wired up now. OpenAI and Gemini drop in later with
+ * the same shape via their AI SDK providers.
  */
 import {anthropic} from '@ai-sdk/anthropic';
 import {createOllama} from 'ollama-ai-provider-v2';
@@ -19,7 +19,7 @@ const DEFAULT_OLLAMA_MODEL = 'qwen2.5';
  * Resolve the provider name from an explicit argument, the AGENT_PROVIDER env
  * var, or the default (anthropic).
  *
- * @param {string} [explicit] - An explicit provider name (e.g. a CLI flag).
+ * @param {string} [explicit] - An explicit provider name from a CLI flag.
  * @returns {string} The resolved provider name.
  */
 export function resolveProviderName(explicit) {

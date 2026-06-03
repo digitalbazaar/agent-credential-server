@@ -4,13 +4,13 @@
 /**
  * The MCP tool set, exposed to the model as Vercel AI SDK tools. Each tool
  * delegates to the genuine, tested mcp-server handler — the model orchestrates
- * them but is never the authority on a decision. check_delegation is the
- * security boundary; its result is returned verbatim.
+ * them but is never the authority on a decision. The check_delegation tool is
+ * the security boundary; its result is returned verbatim.
  */
-import {checkDelegation} from 'mcp-server/lib/tools/delegate.js';
 import {
   createChallengeTool, verifyAuthTool
 } from 'mcp-server/lib/tools/auth.js';
+import {checkDelegation} from 'mcp-server/lib/tools/delegate.js';
 import {resolveDIDTool} from 'mcp-server/lib/tools/resolve.js';
 import {tool} from 'ai';
 import {verifyCredentialTool} from 'mcp-server/lib/tools/verify.js';

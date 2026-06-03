@@ -14,10 +14,10 @@
 import {
   deriveDidKeyIssuer, makeDidKeyDriver
 } from 'mcp-server/lib/tools/didKeyContext.js';
-import {generateKeyPair, sign, toBase64url}
-  from 'mcp-server/lib/core/crypto.js';
 import {generateChallenge, signingInput}
   from 'mcp-server/lib/core/challenge.js';
+import {generateKeyPair, sign, toBase64url}
+  from 'mcp-server/lib/core/crypto.js';
 import {issueCredentialTool} from 'mcp-server/lib/tools/issue.js';
 
 /**
