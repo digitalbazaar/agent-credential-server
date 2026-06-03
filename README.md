@@ -1,8 +1,14 @@
-> **WIP — will change substantially.**
-
 # agent-credential-server
 
-**Agent authorization without a central authority.**
+**Digital Bazaar's reference implementation of [KYA-OS](https://blog.identity.foundation/kya-os/)
+(Know Your Agent OS) Levels 1 & 2, bound to MCP via [MCP-I](https://modelcontextprotocol-identity.io/).**
+
+KYA-OS — "Know Your Agent OS", developed under DIF's Trusted AI Agents Working
+Group — defines how AI agents prove delegated authority from a human without a
+central authority. This repo implements the **L1** (agent identity) and **L2**
+(user-to-agent delegation with per-request edge verification) conformance levels
+on Digital Bazaar's production W3C VC stack, with every requirement traced to
+code and a proving test (see [Conformance](#conformance)).
 
 AI agents are taking on real work - deploying code, calling APIs, managing files.
 But most authorization today is session-based, centralized, or just implicit. When
@@ -33,6 +39,29 @@ breaks down in multi-agent systems, offline environments, and cross-provider wor
 | Cryptographic audit trail | ✗ | ✓ |
 
 See [USE_CASES.md](./USE_CASES.md) for real-world scenarios.
+
+---
+
+## Conformance
+
+This is a **reference implementation**: every KYA-OS requirement is traced to
+the code that enforces it and the test that proves it.
+
+| Level | Scope | Status |
+|---|---|---|
+| **L1** | Agent has a DID and proves control of it. | ✅ implemented |
+| **L2** | User issues a VC to the agent; per-request verification of proof, issuer, expiry, revocation, and scope. | ✅ implemented |
+| **L3** | Selective disclosure, credential-to-token bridging, audit trails. | ⏳ deferred (Phase 2) |
+
+- [`docs/conformance/REQUIREMENTS.md`](./docs/conformance/REQUIREMENTS.md) — the
+  MUST/SHOULD requirements with stable IDs (`R-L1-n`, `R-L2-n`, `R-X-n`).
+- [`docs/conformance/CONFORMANCE.md`](./docs/conformance/CONFORMANCE.md) — each
+  requirement mapped to the proving test (22/22 in-scope covered).
+- [`docs/L1.md`](./docs/L1.md) and [`docs/L2.md`](./docs/L2.md) — per-level
+  walkthroughs with `file:line` citations.
+
+Each enforcement point in the source carries a `// KYA-OS R-Lx-n` comment, so
+you can read spec → code → test in either direction.
 
 ---
 
