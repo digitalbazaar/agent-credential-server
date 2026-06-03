@@ -3,34 +3,42 @@
  */
 /**
  * JSON-LD document loader for Data Integrity issue/verify.
- * No IO of its own — the network is an injected dependency. The did:key
- * resolution and the bundled context documents are deterministic and offline,
- * so this core module stays testable in isolation; only the injected
- * fallbackLoader may perform IO, and the tool layer decides what that is.
+ * No network IO of its own — the network is an injected dependency. The
+ * did:key resolution and the bundled context documents are deterministic and
+ * offline, so this core module stays testable in isolation; only the injected
+ * fallbackLoader may perform network IO, and the tool layer decides what that
+ * is. The one read at module load is a static, bundled repo asset (the
+ * canonical context file), equivalent to an imported constant.
  */
+import {fileURLToPath} from 'node:url';
+import {readFileSync} from 'node:fs';
 
 /**
- * Stable URL for the agent-credential claim context. Served locally from the
- * bundled constant below; publishing a resolvable document is deferred to a
- * later phase.
+ * Stable URL identifying the agent-credential claim context. This is the
+ * canonical `@context` IRI embedded in issued credentials. The resolvable
+ * document is served from the bundled file below; redirecting this URL to a
+ * public host is a separate publishing step (see contexts/README.md).
  */
 export const AGENT_CREDENTIAL_CONTEXT_URL =
   'https://w3id.org/agent-credential/v1';
 
 /**
- * The agent-credential claim context. Defines the demo claim terms so JSON-LD
- * safe mode keeps them, with an @vocab fallback so arbitrary claims still
- * expand to an absolute IRI instead of being dropped.
+ * The agent-credential claim context, loaded from the canonical
+ * `contexts/agent-credential-v1.jsonld` file so the served document and the
+ * file published to w3id.org are the same bytes. Defines the demo claim terms
+ * so JSON-LD safe mode keeps them, with an @vocab fallback so arbitrary claims
+ * still expand to an absolute IRI instead of being dropped.
+ *
+ * @type {Readonly<Record<string, unknown>>}
  */
-export const AGENT_CREDENTIAL_CONTEXT = Object.freeze({
-  '@context': {
-    '@vocab': 'https://w3id.org/agent-credential#',
-    age_verified: 'https://w3id.org/agent-credential#age_verified',
-    over_21: 'https://w3id.org/agent-credential#over_21',
-    delegatedFrom: 'https://w3id.org/agent-credential#delegatedFrom',
-    role: 'https://w3id.org/agent-credential#role'
-  }
-});
+export const AGENT_CREDENTIAL_CONTEXT = Object.freeze(
+  JSON.parse(readFileSync(
+    fileURLToPath(
+      new URL('../../contexts/agent-credential-v1.jsonld', import.meta.url)
+    ),
+    'utf8'
+  ))
+);
 
 /**
  * @typedef {object} DocumentLoaderResult

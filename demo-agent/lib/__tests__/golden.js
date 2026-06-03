@@ -103,6 +103,36 @@ export function goldenCases(scenarios) {
       mustCallTool: true
     },
     {
+      name: 'licensed professional, role and license satisfied',
+      buildInputs: () => scenarios.buildLicensedProfessionalPass(),
+      expectedDecision: 'GRANTED',
+      mustCallTool: true
+    },
+    {
+      name: 'professional role matches but license is false',
+      buildInputs: () => scenarios.buildLicensedProfessionalFail(),
+      expectedDecision: 'DENIED',
+      mustCallTool: true
+    },
+    {
+      name: 'membership tier meets numeric threshold (non-age $gte)',
+      buildInputs: () => scenarios.buildMembershipTierPass(),
+      expectedDecision: 'GRANTED',
+      mustCallTool: true
+    },
+    {
+      name: 'membership tier below numeric threshold',
+      buildInputs: () => scenarios.buildMembershipTierFail(),
+      expectedDecision: 'DENIED',
+      mustCallTool: true
+    },
+    {
+      name: 'not-yet-valid credential (validFrom in the future)',
+      buildInputs: () => scenarios.buildNotYetValid(),
+      expectedDecision: 'DENIED',
+      mustCallTool: true
+    },
+    {
       name: 'authn: valid credential and valid auth proof',
       buildInputs: () => scenarios.buildAuthnValid(),
       expectedDecision: 'GRANTED',

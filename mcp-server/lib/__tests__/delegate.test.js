@@ -46,6 +46,8 @@ async function deriveDidKey(kp) {
  * @param {object} [options] - Issuance options.
  * @param {Record<string, unknown>} [options.claims] - The subject claims.
  * @param {number} [options.expiresInSeconds] - TTL in seconds.
+ * @param {number} [options.validFromInSeconds] - Seconds from now until the
+ *   credential becomes valid; positive values make it not-yet-valid.
  * @param {string} [options.subjectDid] - Override the subject DID.
  * @returns {Promise<DataIntegrityCredential>} The signed credential.
  */
@@ -53,6 +55,7 @@ async function makeVC(options = {}) {
   const {
     claims = {age_verified: true, over_21: true},
     expiresInSeconds,
+    validFromInSeconds,
     subjectDid = AGENT_DID
   } = options;
   const kp = await generateKeyPair();
@@ -60,7 +63,8 @@ async function makeVC(options = {}) {
     subjectDid,
     claims,
     privateKeyBase64url: toBase64url(kp.privateKey),
-    expiresInSeconds
+    expiresInSeconds,
+    validFromInSeconds
   });
 }
 
@@ -137,6 +141,20 @@ describe('checkDelegation', () => {
     });
     expect(result.authorized).toBe(false);
     expect(result.reason).toMatch(/validUntil|expired/i);
+  });
+
+  it('denies when VC is not yet valid', async () => {
+    // validFrom well beyond the 300s default clock skew
+    const credential = await makeVC({
+      claims: {over_21: true}, validFromInSeconds: 3600
+    });
+    const result = await checkDelegation({
+      agentDid: AGENT_DID,
+      requestedAction: ACTION,
+      credential
+    });
+    expect(result.authorized).toBe(false);
+    expect(result.reason).toMatch(/validFrom|not yet|future/i);
   });
 
   it('denies when the credentialSubject is tampered', async () => {

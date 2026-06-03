@@ -60,6 +60,23 @@ describe('scenarios decide as labeled', () => {
   it('predicate $in fail → denied', async () => {
     expect(await decide(await scenarios.buildPredicateInFail())).toBe(false);
   });
+  it('licensed professional pass → authorized', async () => {
+    expect(await decide(await scenarios.buildLicensedProfessionalPass()))
+      .toBe(true);
+  });
+  it('licensed professional fail (not licensed) → denied', async () => {
+    expect(await decide(await scenarios.buildLicensedProfessionalFail()))
+      .toBe(false);
+  });
+  it('membership tier pass → authorized', async () => {
+    expect(await decide(await scenarios.buildMembershipTierPass())).toBe(true);
+  });
+  it('membership tier fail → denied', async () => {
+    expect(await decide(await scenarios.buildMembershipTierFail())).toBe(false);
+  });
+  it('not-yet-valid → denied', async () => {
+    expect(await decide(await scenarios.buildNotYetValid())).toBe(false);
+  });
   it('authn valid → authorized', async () => {
     expect(await decide(await scenarios.buildAuthnValid())).toBe(true);
   });

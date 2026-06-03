@@ -106,7 +106,7 @@ export async function checkDelegation(input) {
     if(error || !encodedList) {
       return {authorized: false, reason: `Cannot fetch status list: ${error}`};
     }
-    const revocationResult = checkRevocationStatus(
+    const revocationResult = await checkRevocationStatus(
       encodedList,
       cs.statusListIndex
     );

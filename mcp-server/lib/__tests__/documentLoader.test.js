@@ -7,7 +7,9 @@ import {
   createDocumentLoader
 } from '../core/documentLoader.js';
 import {driver as didKeyDriverFactory} from '@digitalbazaar/did-method-key';
+import {fileURLToPath} from 'node:url';
 import {jest} from '@jest/globals';
+import {readFileSync} from 'node:fs';
 
 /**
  * @typedef {import('@digitalbazaar/did-method-key').DidKeyDriver} DidKeyDriver
@@ -84,6 +86,17 @@ describe('createDocumentLoader: bundled contexts', () => {
     expect(result.document).toEqual(AGENT_CREDENTIAL_CONTEXT);
     // a bundled context must never hit the network fallback
     expect(fallback).not.toHaveBeenCalled();
+  });
+
+  it('serves exactly the canonical context file from disk', () => {
+    // the bytes served must match the file that will be published to w3id.org
+    const filePath = fileURLToPath(new URL(
+      '../../contexts/agent-credential-v1.jsonld', import.meta.url
+    ));
+    const onDisk = JSON.parse(readFileSync(filePath, 'utf8'));
+    expect(AGENT_CREDENTIAL_CONTEXT).toEqual(onDisk);
+    expect(onDisk['@context']['@vocab'])
+      .toBe('https://w3id.org/agent-credential#');
   });
 
   it('serves the VC 2.0 context via the default loader fallback', async () => {
