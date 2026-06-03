@@ -3,7 +3,7 @@
  */
 import {
   fromBase64url, generateKeyPair, generateMultikey,
-  publicKeyBytesFromMultibase, sign, toBase64url, verify
+  publicKeyBytesFromMultibase, publicKeyFromSeed, sign, toBase64url, verify
 } from '../core/crypto.js';
 
 describe('crypto', () => {
@@ -11,6 +11,12 @@ describe('crypto', () => {
     const kp = await generateKeyPair();
     expect(kp.privateKey).toHaveLength(32);
     expect(kp.publicKey).toHaveLength(32);
+  });
+
+  it('derives the public key from a seed', async () => {
+    const kp = await generateKeyPair();
+    const derived = publicKeyFromSeed(kp.privateKey);
+    expect(derived).toEqual(kp.publicKey);
   });
 
   it('sign + verify roundtrip succeeds', async () => {
