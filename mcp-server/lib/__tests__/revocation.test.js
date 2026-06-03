@@ -4,89 +4,95 @@
 import {
   checkRevocationStatus, decodeStatusList, isRevoked
 } from '../core/revocation.js';
-import {gzipSync} from 'node:zlib';
+import {createList} from '@digitalbazaar/vc-status-list';
 
 /**
- * Build a gzip-compressed, base64-encoded StatusList2021 bitstring.
+ * Build a StatusList2021 encoded bitstring using the DB canonical library, so
+ * the fixture matches exactly what a real DB issuer produces (base64url+gzip,
+ * MSB-first indexing).
  *
  * @param {number[]} revokedIndexes - Bit positions to mark as revoked.
- * @param {number} [totalBits=16384] - Total bitstring length in bits.
- * @returns {string} The encoded status list.
+ * @param {number} [length=16384] - Total bitstring length in bits.
+ * @returns {Promise<string>} The encoded status list.
  */
-function makeEncodedList(revokedIndexes, totalBits = 16384) {
-  const bytes = new Uint8Array(Math.ceil(totalBits / 8));
+async function makeEncodedList(revokedIndexes, length = 16384) {
+  const list = await createList({length});
   for(const idx of revokedIndexes) {
-    const byteIndex = Math.floor(idx / 8);
-    const bitIndex = 7 - (idx % 8); // MSB first
-    bytes[byteIndex] |= 1 << bitIndex;
+    list.setStatus(idx, true);
   }
-  const compressed = gzipSync(Buffer.from(bytes));
-  return Buffer.from(compressed).toString('base64url');
+  return list.encode();
 }
 
 describe('decodeStatusList', () => {
-  it('decodes a gzip+base64url encoded status list', () => {
-    const encoded = makeEncodedList([]);
-    const decoded = decodeStatusList(encoded);
-    expect(decoded).toBeInstanceOf(Uint8Array);
-    expect(decoded.length).toBeGreaterThan(0);
+  it('decodes a gzip+base64url encoded status list', async () => {
+    const encoded = await makeEncodedList([]);
+    const list = await decodeStatusList(encoded);
+    expect(typeof list.getStatus).toBe('function');
+    expect(list.length).toBeGreaterThan(0);
   });
 
-  it('throws on invalid base64url', () => {
-    expect(() => decodeStatusList('!!!invalid!!!')).toThrow();
+  it('rejects on invalid encoded input', async () => {
+    await expect(decodeStatusList('!!!invalid!!!')).rejects.toThrow();
   });
 });
 
 describe('isRevoked', () => {
-  it('returns false when bit is 0', () => {
-    const encoded = makeEncodedList([]); // no bits set
-    const decoded = decodeStatusList(encoded);
-    expect(isRevoked(decoded, 0)).toBe(false);
-    expect(isRevoked(decoded, 100)).toBe(false);
+  it('returns false when bit is 0', async () => {
+    const encoded = await makeEncodedList([]); // no bits set
+    const list = await decodeStatusList(encoded);
+    expect(isRevoked(list, 0)).toBe(false);
+    expect(isRevoked(list, 100)).toBe(false);
   });
 
-  it('returns true when bit is set', () => {
-    const encoded = makeEncodedList([5, 42]);
-    const decoded = decodeStatusList(encoded);
-    expect(isRevoked(decoded, 5)).toBe(true);
-    expect(isRevoked(decoded, 42)).toBe(true);
+  it('returns true when bit is set', async () => {
+    const encoded = await makeEncodedList([5, 42]);
+    const list = await decodeStatusList(encoded);
+    expect(isRevoked(list, 5)).toBe(true);
+    expect(isRevoked(list, 42)).toBe(true);
   });
 
-  it('returns false for unset neighbor bits', () => {
-    const encoded = makeEncodedList([5]);
-    const decoded = decodeStatusList(encoded);
-    expect(isRevoked(decoded, 4)).toBe(false);
-    expect(isRevoked(decoded, 6)).toBe(false);
+  it('returns false for unset neighbor bits', async () => {
+    const encoded = await makeEncodedList([5]);
+    const list = await decodeStatusList(encoded);
+    expect(isRevoked(list, 4)).toBe(false);
+    expect(isRevoked(list, 6)).toBe(false);
   });
 
-  it('returns false for out-of-range index', () => {
-    const encoded = makeEncodedList([]);
-    const decoded = decodeStatusList(encoded);
-    expect(isRevoked(decoded, 9999999)).toBe(false);
+  it('returns false for out-of-range index', async () => {
+    const encoded = await makeEncodedList([]);
+    const list = await decodeStatusList(encoded);
+    expect(isRevoked(list, 9999999)).toBe(false);
+  });
+
+  it('returns false for negative index', async () => {
+    const encoded = await makeEncodedList([]);
+    const list = await decodeStatusList(encoded);
+    expect(isRevoked(list, -1)).toBe(false);
   });
 });
 
 describe('checkRevocationStatus', () => {
-  it('returns not revoked when bit clear', () => {
-    const encoded = makeEncodedList([]);
-    const result = checkRevocationStatus(encoded, '10');
+  it('returns not revoked when bit clear', async () => {
+    const encoded = await makeEncodedList([]);
+    const result = await checkRevocationStatus(encoded, '10');
     expect(result.revoked).toBe(false);
   });
 
-  it('returns revoked when bit set', () => {
-    const encoded = makeEncodedList([10]);
-    const result = checkRevocationStatus(encoded, '10');
+  it('returns revoked when bit set', async () => {
+    const encoded = await makeEncodedList([10]);
+    const result = await checkRevocationStatus(encoded, '10');
     expect(result.revoked).toBe(true);
     expect(result.reason).toMatch(/revoked/i);
   });
 
-  it('returns revoked with reason for index 0', () => {
-    const encoded = makeEncodedList([0]);
-    const result = checkRevocationStatus(encoded, '0');
+  it('returns revoked with reason for index 0', async () => {
+    const encoded = await makeEncodedList([0]);
+    const result = await checkRevocationStatus(encoded, '0');
     expect(result.revoked).toBe(true);
   });
 
-  it('handles invalid encodedList', () => {
-    expect(() => checkRevocationStatus('not-valid-gzip', '0')).toThrow();
+  it('handles invalid encodedList', async () => {
+    await expect(checkRevocationStatus('not-valid-gzip', '0'))
+      .rejects.toThrow();
   });
 });
