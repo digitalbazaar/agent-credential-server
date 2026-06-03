@@ -5,8 +5,7 @@
  * IO boundary for agent authentication tools.
  */
 import {generateChallenge, verifyChallengeResponse} from '../core/challenge.js';
-import {extractEd25519Key} from './verify.js';
-import {resolveDID} from '../core/resolver.js';
+import {resolveAgentKey} from './didKeyContext.js';
 
 /**
  * @typedef {import("../core/challenge.js").ChallengeToken} ChallengeToken
@@ -37,23 +36,12 @@ export async function createChallengeTool(input) {
  *   agent authenticated, with a reason on failure.
  */
 export async function verifyAuthTool(input) {
-  // Resolve agent DID to get their public key
-  const resolution = await resolveDID(input.agentDid);
-  if(resolution.didResolutionMetadata.error || !resolution.didDocument) {
-    return {
-      authenticated: false,
-      reason: 'Cannot resolve agent DID: ' +
-        `${resolution.didResolutionMetadata.error}`
-    };
-  }
-
-  const publicKey = extractEd25519Key(
-    resolution.didDocument.verificationMethod ?? []
-  );
+  // Resolve agent DID to get their public key (did:key offline, else network)
+  const publicKey = await resolveAgentKey(input.agentDid);
   if(!publicKey) {
     return {
       authenticated: false,
-      reason: 'No Ed25519 key found in agent DID document'
+      reason: `Cannot resolve agent DID: ${input.agentDid}`
     };
   }
 

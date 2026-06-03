@@ -11,6 +11,8 @@ import * as Ed25519Multikey from '@digitalbazaar/ed25519-multikey';
 import * as vcjs from '@digitalbazaar/vc';
 import {createDocumentLoader} from '../core/documentLoader.js';
 import {driver as didKeyDriverFactory} from '@digitalbazaar/did-method-key';
+import {publicKeyBytesFromMultibase} from '../core/crypto.js';
+import {resolveDID} from '../core/resolver.js';
 
 /**
  * @typedef {import('../core/documentLoader.js').DocumentLoader} DocumentLoader
@@ -83,4 +85,34 @@ export async function deriveDidKeyIssuer(privateKey, driver) {
   keyPair.id = vm.id;
   keyPair.controller = didDocument.id;
   return {did: didDocument.id, signer: keyPair.signer()};
+}
+
+/**
+ * Resolve a DID to its raw Ed25519 public key. A did:key resolves offline and
+ * deterministically; other methods fall back to the Universal Resolver.
+ *
+ * @param {string} did - The DID to resolve.
+ * @returns {Promise<Uint8Array | null>} The raw public key, or null if it
+ *   cannot be resolved.
+ */
+export async function resolveAgentKey(did) {
+  // 1. did:key — the public key is encoded in the DID itself, no network
+  if(did.startsWith('did:key:')) {
+    try {
+      // the multikey id fragment is the multibase-encoded public key
+      const multibase = did.slice('did:key:'.length);
+      return await publicKeyBytesFromMultibase(multibase);
+    } catch {
+      return null;
+    }
+  }
+
+  // 2. other methods — resolve via the Universal Resolver and extract the key
+  const resolution = await resolveDID(did);
+  if(resolution.didResolutionMetadata.error || !resolution.didDocument) {
+    return null;
+  }
+  // imported lazily to avoid a static import cycle with verify.js
+  const {extractEd25519Key} = await import('./verify.js');
+  return extractEd25519Key(resolution.didDocument.verificationMethod ?? []);
 }
