@@ -53,6 +53,7 @@ export async function verifyDelegationChainTool(input) {
 
   // 1. The leaf must be delegated to the expected agent (zcap verifies chain
   //    continuity but not the specific recipient DID).
+  // KYA-OS R-L2-11: a multi-hop chain MUST verify down to the leaf agent.
   const leafCheck = checkLeafController({
     capability: delegatedCapability,
     expectedController: agentDid
@@ -63,6 +64,8 @@ export async function verifyDelegationChainTool(input) {
 
   // 2. Verify the delegation chain: proofs, continuity, expiry attenuation,
   //    and that it descends from the expected root.
+  // KYA-OS R-L2-12: enforce expiry attenuation (child <= parent) and reject a
+  // scope/target/root mismatch.
   const documentLoader = createZcapDocumentLoader({
     didKeyDriver: makeDidKeyDriver(),
     rootCapabilities: [rootCapability]

@@ -45,6 +45,9 @@ const UNIVERSAL_RESOLVER_BASE = 'https://dev.uniresolver.io/1.0/identifiers';
 export async function resolveDID(did) {
   // did:web resolves natively; the fallback covers it only if the direct
   // fetch fails (host down, non-2xx, or unparseable did.json).
+  // KYA-OS R-L1-3: resolve non-did:key DIDs method-appropriately (did:web
+  // natively, else Universal Resolver). R-L1-4: did:web SHOULD fall back to
+  // the Universal Resolver when the direct fetch fails.
   const webUrl = didWebToUrl(did);
   if(webUrl) {
     const native = await resolveDIDWeb(webUrl);

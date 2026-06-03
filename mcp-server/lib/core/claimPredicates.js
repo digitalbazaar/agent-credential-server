@@ -45,6 +45,10 @@ export function evaluatePredicate(actual, predicate) {
 
   const ops = predicate;
 
+  // KYA-OS R-L2-10: numeric operators MUST NOT coerce. Each comparison below
+  // requires `actual` to already be a number; a string "25" or a boolean is
+  // rejected rather than coerced, so a mistyped or forged claim cannot pass a
+  // threshold gate. $in/$nin likewise use strict equality (===, includes).
   if('$eq' in ops && actual !== ops.$eq) {
     return false;
   }

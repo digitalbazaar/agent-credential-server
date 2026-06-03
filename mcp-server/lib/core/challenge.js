@@ -3,6 +3,11 @@
  */
 /**
  * Agent authentication via challenge-response. Pure, no IO.
+ *
+ * KYA-OS R-L1-1: an agent is identified by a DID. R-L1-5: the agent proves
+ * control of its DID by signing a nonce challenge (no key material is
+ * transmitted). R-L1-6: an expired or wrongly-signed challenge is rejected
+ * (see isChallengeExpired and verifyChallengeResponse).
  */
 import {fromBase64url, toBase64url, verify} from './crypto.js';
 import {randomBytes} from 'node:crypto';

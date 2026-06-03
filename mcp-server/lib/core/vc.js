@@ -92,6 +92,9 @@ const VC2_CONTEXT_URL = 'https://www.w3.org/ns/credentials/v2';
 /**
  * Issue a VC 2.0 credential with an eddsa-rdfc-2022 Data Integrity proof.
  *
+ * KYA-OS R-L2-1: a delegation is a Verifiable Credential the user issues to
+ * the agent.
+ *
  * @param {IssueDIInput} input - Issuer, subject, claims, signer, and loader.
  * @returns {Promise<DataIntegrityCredential>} The signed credential.
  */
@@ -132,7 +135,9 @@ export async function verifyCredentialDI(input) {
   const {credential, documentLoader} = input;
   const suite = new DataIntegrityProof({cryptosuite: eddsaRdfc2022});
 
-  // 1. Verify proof, expiry (validUntil), and structure via the vc library
+  // 1. Verify proof, expiry (validUntil), and structure via the vc library.
+  // KYA-OS R-L2-3, R-L2-5, R-L2-6: the eddsa-rdfc-2022 proof MUST verify, and
+  // an expired (validUntil) or not-yet-valid (validFrom) credential is denied.
   let result;
   try {
     result = await vcjs.verifyCredential({credential, suite, documentLoader});
