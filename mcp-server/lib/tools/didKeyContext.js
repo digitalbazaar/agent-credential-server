@@ -9,9 +9,10 @@
  */
 import * as Ed25519Multikey from '@digitalbazaar/ed25519-multikey';
 import * as vcjs from '@digitalbazaar/vc';
+import {publicKeyBytesFromMultibase, publicKeyFromSeed}
+  from '../core/crypto.js';
 import {createDocumentLoader} from '../core/documentLoader.js';
 import {driver as didKeyDriverFactory} from '@digitalbazaar/did-method-key';
-import {publicKeyBytesFromMultibase} from '../core/crypto.js';
 import {resolveDID} from '../core/resolver.js';
 
 /**
@@ -64,8 +65,7 @@ export function makeDocumentLoader(driver = makeDidKeyDriver()) {
 export async function deriveDidKeyIssuer(privateKey, driver) {
   // reconstruct a multikey from the raw seed via its JWK form, then derive
   // the did:key document so the issuer DID matches the signing key
-  const {getPublicKeyAsync} = await import('@noble/ed25519');
-  const publicKey = await getPublicKeyAsync(privateKey);
+  const publicKey = publicKeyFromSeed(privateKey);
   const toB64u = (/** @type {Uint8Array} */ b) =>
     Buffer.from(b).toString('base64url');
   const keyPair = await Ed25519Multikey.fromJwk({

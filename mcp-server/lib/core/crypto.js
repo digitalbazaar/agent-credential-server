@@ -6,18 +6,38 @@
  * No IO — testable in isolation.
  *
  * The multikey surface (generateMultikey, publicKeyBytesFromMultibase) is the
- * primary, DB-stack-native path built on ed25519-multikey. The raw-bytes
- * bridge (generateKeyPair, sign, verify) preserves the legacy Uint8Array key
- * API that the still-JWT-based vc.js, chain.js, and challenge.js depend on.
- * The bridge is re-based on multikey except for one Ed25519 seed-to-public-key
- * derivation in sign(), which the DB libraries do not expose; that single
- * noble call is marked for removal once the JWT signing path retires.
+ * primary, DB-stack-native path built on ed25519-multikey. A raw-bytes bridge
+ * (generateKeyPair, sign, verify) exposes a Uint8Array key API used by the
+ * challenge-response authentication path. Both are built on ed25519-multikey;
+ * the one primitive the DB libraries do not provide — deriving a public key
+ * from a 32-byte seed — uses Node's built-in crypto, not a third-party library.
  */
 import * as base58 from 'base58-universal';
 import * as Ed25519Multikey from '@digitalbazaar/ed25519-multikey';
+import {createPrivateKey, createPublicKey} from 'node:crypto';
 
 // Ed25519 public-key multicodec prefix (varint 0xed 0x01).
 const ED25519_PUB_PREFIX = new Uint8Array([0xed, 0x01]);
+
+// DER PKCS#8 prefix for an Ed25519 private key carrying a bare 32-byte seed.
+const ED25519_PKCS8_PREFIX = Buffer.from(
+  '302e020100300506032b657004220420', 'hex'
+);
+
+/**
+ * Derive the 32-byte Ed25519 public key from a 32-byte seed, using Node's
+ * built-in crypto (no third-party Ed25519 implementation).
+ *
+ * @param {Uint8Array} seed - The 32-byte Ed25519 seed.
+ * @returns {Uint8Array} The 32-byte public key.
+ */
+export function publicKeyFromSeed(seed) {
+  const der = Buffer.concat([ED25519_PKCS8_PREFIX, Buffer.from(seed)]);
+  const privateKey = createPrivateKey({key: der, format: 'der', type: 'pkcs8'});
+  const jwk = createPublicKey(privateKey).export({format: 'jwk'});
+  const x = /** @type {string} */ (jwk.x);
+  return new Uint8Array(Buffer.from(x, 'base64url'));
+}
 
 /**
  * @typedef {object} KeyPair
@@ -102,15 +122,7 @@ export async function generateKeyPair() {
  * @returns {Promise<Uint8Array>} The 64-byte signature.
  */
 export async function sign(payload, privateKey) {
-  // Ed25519 seed → public key derivation is not exposed by the DB libraries;
-  // this single @noble call is the only legacy dependency here and is removed
-  // when the JWT signing path retires.
-  const {getPublicKeyAsync} = await import('@noble/ed25519');
-  const {sha512} = await import('@noble/hashes/sha2.js');
-  const ed = await import('@noble/ed25519');
-  ed.etc.sha512Sync = (...m) => sha512(ed.etc.concatBytes(...m));
-  const publicKey = await getPublicKeyAsync(privateKey);
-
+  const publicKey = publicKeyFromSeed(privateKey);
   const jwk = {
     kty: 'OKP',
     crv: 'Ed25519',
