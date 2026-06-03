@@ -1,12 +1,10 @@
 /*!
  * Copyright (c) 2026 Digital Bazaar, Inc.
  */
+import {makeDocumentLoader, resolveAgentKey} from './didKeyContext.js';
 import {checkClaims} from '../core/claimPredicates.js';
 import {checkRevocationStatus} from '../core/revocation.js';
-import {extractEd25519Key} from './verify.js';
 import {fetchStatusList} from '../core/statusListFetcher.js';
-import {makeDocumentLoader} from './didKeyContext.js';
-import {resolveDID} from '../core/resolver.js';
 import {verifyChallengeResponse} from '../core/challenge.js';
 import {verifyCredentialDI} from '../core/vc.js';
 
@@ -55,24 +53,11 @@ export async function checkDelegation(input) {
 
   // 0. Verify agent auth proof if provided
   if(authProof) {
-    const agentResolution = await resolveDID(agentDid);
-    if(
-      agentResolution.didResolutionMetadata.error ||
-      !agentResolution.didDocument
-    ) {
-      return {
-        authorized: false,
-        reason: 'Cannot resolve agent DID for auth: ' +
-          `${agentResolution.didResolutionMetadata.error}`
-      };
-    }
-    const agentKey = extractEd25519Key(
-      agentResolution.didDocument.verificationMethod ?? []
-    );
+    const agentKey = await resolveAgentKey(agentDid);
     if(!agentKey) {
       return {
         authorized: false,
-        reason: 'No Ed25519 key found in agent DID document'
+        reason: `Cannot resolve agent DID for auth: ${agentDid}`
       };
     }
     /** @type {ChallengeToken} */

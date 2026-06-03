@@ -7,10 +7,11 @@ implementation of KYA-OS: a clean, readable, spec-traced MCP-I server built on
 DB's real Verifiable Credential stack. Conformance is table stakes; readability
 and spec-traceability are the point.
 
-> Status: **Phase 1 DB-stack swap largely complete** — crypto → multikey, vc →
-> VC 2.0 Data Integrity, and the delegation chain → zcap are all merged (see
-> §6). Remaining: migrate the demo-agent off the legacy JWT path, then final
-> cleanup. §3 below is the pre–Phase-1 "before" snapshot, kept for context.
+> Status: **Phase 1 DB-stack swap essentially complete** — crypto → multikey,
+> vc → VC 2.0 Data Integrity, delegation chain → zcap, and the model-agnostic
+> demo-agent with its eval gate are all merged (see §6). The hand-rolled JWT
+> path is gone. Remaining: remove `@noble` (a multikey-native refactor) and
+> minor polish. §3 below is the pre–Phase-1 "before" snapshot, kept for context.
 
 ---
 
@@ -188,11 +189,17 @@ step = its own PR.
   deleted `core/chain.js`. `verify_delegation_chain` is now capability-based.
 - ✅ **Cleanup (partial)** — removed the dead `verifyCredentialJwt`/
   `parseCredential`; fixed the MCP server name.
-- ⏳ **Demo-agent → Data Integrity** — still on the legacy JWT path; migrate
-  with an eval target defined first (LLM in the runtime path).
-- ⏳ **Final cleanup** (after demo-agent): remove the last JWT function
-  (`issueCredential`) and `@noble`; reconcile `revocation.js` with DB
-  status-list; native `did:web` resolution; publish the claim context.
+- ✅ **Demo-agent → Data Integrity, model-agnostic** (PR #8). Rebuilt the demo
+  on the Vercel AI SDK (Anthropic + Ollama; OpenAI/Gemini drop-in). The LLM is
+  never the authority — it calls `check_delegation` and reports its verdict.
+  An **eval gate** (defined first, deterministic/offline, with tool-deference
+  and leakage canaries) runs in CI. Added offline did:key agent resolution so
+  the authn path is deterministic. Removed the dead JWT `issueCredential` and
+  its test.
+- ⏳ **Remaining cleanup**: remove `@noble` (still used by the challenge-auth
+  `sign`/`verify` bridge and `deriveDidKeyIssuer` — needs a multikey-native
+  seed→pubkey first); reconcile `revocation.js` with DB status-list; native
+  `did:web` resolution; publish the claim context.
 
 ### Phase 1.5 — Reference-impl polish
 - `REQUIREMENTS.md` + `docs/L1.md` + `docs/L2.md`.
