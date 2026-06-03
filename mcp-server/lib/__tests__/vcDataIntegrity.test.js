@@ -141,6 +141,25 @@ describe('verifyCredentialDI', () => {
     expect(result.reason).toMatch(/validUntil|expired/i);
   });
 
+  it('rejects a not-yet-valid credential', async () => {
+    const {did, signer, documentLoader} = await makeIssuer();
+    // becomes valid well beyond the 300s default clock skew
+    const signed = await issueCredentialDI({
+      issuerDid: did,
+      subjectDid: AGENT_DID,
+      claims: {over_21: true},
+      validFromInSeconds: 3600,
+      signer,
+      documentLoader
+    });
+    expect(signed.validFrom).toBeDefined();
+    const result = await verifyCredentialDI({
+      credential: signed, documentLoader
+    });
+    expect(result.valid).toBe(false);
+    expect(result.reason).toMatch(/validFrom|not yet|future/i);
+  });
+
   it('rejects a credential signed by a different key', async () => {
     const issuer = await makeIssuer();
     const impostor = await makeIssuer();

@@ -47,6 +47,7 @@ const VC2_CONTEXT_URL = 'https://www.w3.org/ns/credentials/v2';
  *   '@context': (string | object)[],
  *   type: string[],
  *   issuer: string,
+ *   validFrom?: string,
  *   validUntil?: string,
  *   credentialSubject: VCClaims & {id: string},
  *   credentialStatus?: CredentialStatus,
@@ -65,6 +66,9 @@ const VC2_CONTEXT_URL = 'https://www.w3.org/ns/credentials/v2';
  *   and the credential contexts.
  * @property {number} [expiresInSeconds] - Lifetime in seconds; omit for no
  *   expiry. Negative values produce an already-expired credential (for tests).
+ * @property {number} [validFromInSeconds] - Seconds from now until the
+ *   credential becomes valid; omit for immediately valid. Positive values
+ *   produce a not-yet-valid credential (for tests).
  * @property {CredentialStatus} [credentialStatus] - Optional status entry.
  */
 
@@ -94,13 +98,16 @@ const VC2_CONTEXT_URL = 'https://www.w3.org/ns/credentials/v2';
 export async function issueCredentialDI(input) {
   const {
     issuerDid, subjectDid, claims, signer, documentLoader,
-    expiresInSeconds, credentialStatus
+    expiresInSeconds, validFromInSeconds, credentialStatus
   } = input;
 
   const credential = {
     '@context': [VC2_CONTEXT_URL, AGENT_CREDENTIAL_CONTEXT_URL],
     type: ['VerifiableCredential'],
     issuer: issuerDid,
+    ...(validFromInSeconds === undefined ? {} : {
+      validFrom: new Date(Date.now() + validFromInSeconds * 1000).toISOString()
+    }),
     ...(expiresInSeconds === undefined ? {} : {
       validUntil: new Date(Date.now() + expiresInSeconds * 1000).toISOString()
     }),

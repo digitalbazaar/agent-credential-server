@@ -93,6 +93,36 @@ describe('evaluatePredicate', () => {
     it('$gt returns false for non-number actual', () =>
       expect(evaluatePredicate('foo', {$gt: 0})).toBe(false));
   });
+
+  // A claim value must NOT be coerced before a numeric comparison: a string
+  // "25" or a boolean true must never satisfy {$gte: 21}. Coercion here would
+  // let a forged or mistyped claim pass an age/threshold gate.
+  describe('type confusion: numeric operators never coerce', () => {
+    it('numeric-looking string fails $gte', () =>
+      expect(evaluatePredicate('25', {$gte: 21})).toBe(false));
+    it('numeric-looking string fails $gt', () =>
+      expect(evaluatePredicate('25', {$gt: 21})).toBe(false));
+    it('numeric-looking string fails $lte', () =>
+      expect(evaluatePredicate('10', {$lte: 21})).toBe(false));
+    it('numeric-looking string fails $lt', () =>
+      expect(evaluatePredicate('10', {$lt: 21})).toBe(false));
+    it('boolean true fails $gt (no coercion to 1)', () =>
+      expect(evaluatePredicate(true, {$gt: 0})).toBe(false));
+    it('null fails $gte (no coercion to 0)', () =>
+      expect(evaluatePredicate(null, {$gte: 0})).toBe(false));
+    it('a real number still passes $gte', () =>
+      expect(evaluatePredicate(25, {$gte: 21})).toBe(true));
+  });
+
+  // $in / $nin use strict membership: "25" is not 25, true is not 1.
+  describe('type confusion: $in / $nin use strict equality', () => {
+    it('numeric-looking string is not in a numeric set', () =>
+      expect(evaluatePredicate('1', {$in: [1, 2, 3]})).toBe(false));
+    it('number is not in a string set', () =>
+      expect(evaluatePredicate(1, {$in: ['1', '2']})).toBe(false));
+    it('$nin treats a type-mismatched value as not present', () =>
+      expect(evaluatePredicate('1', {$nin: [1, 2]})).toBe(true));
+  });
 });
 
 describe('checkClaims', () => {

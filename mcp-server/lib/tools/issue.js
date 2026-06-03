@@ -20,6 +20,8 @@ import {issueCredentialDI} from '../core/vc.js';
  * @property {string} privateKeyBase64url Base64url Ed25519 seed (32 bytes); the
  *   issuer did:key is derived from it.
  * @property {number} [expiresInSeconds] Optional TTL in seconds.
+ * @property {number} [validFromInSeconds] Optional seconds from now until the
+ *   credential becomes valid; positive values make it not-yet-valid.
  * @property {string} [delegatedFrom] Optional delegation chain reference.
  * @property {CredentialStatus} [credentialStatus] Optional credential status.
  */
@@ -50,6 +52,7 @@ export async function issueCredentialTool(input) {
     signer,
     documentLoader: makeDocumentLoader(driver),
     expiresInSeconds: input.expiresInSeconds,
+    validFromInSeconds: input.validFromInSeconds,
     credentialStatus: input.credentialStatus
   });
 }

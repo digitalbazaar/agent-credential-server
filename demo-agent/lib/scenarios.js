@@ -43,6 +43,8 @@ const AGENT_DID = 'did:key:z6MkrXSj4tMC91B6xiaH9vSxNRL9Fzcu5XFdqNTuFtGKAgent';
  * @param {object} options - Issuance options.
  * @param {Record<string, unknown>} options.claims - The subject claims.
  * @param {number} [options.expiresInSeconds] - TTL in seconds.
+ * @param {number} [options.validFromInSeconds] - Seconds from now until the
+ *   credential becomes valid; positive values make it not-yet-valid.
  * @param {string} [options.subjectDid] - The subject DID (defaults to agent).
  * @returns {Promise<DataIntegrityCredential>} The signed credential.
  */
@@ -52,7 +54,8 @@ async function issue(options) {
     subjectDid: options.subjectDid ?? AGENT_DID,
     claims: options.claims,
     privateKeyBase64url: toBase64url(issuerKp.privateKey),
-    expiresInSeconds: options.expiresInSeconds
+    expiresInSeconds: options.expiresInSeconds,
+    validFromInSeconds: options.validFromInSeconds
   });
 }
 
@@ -260,6 +263,90 @@ export async function buildAuthnWrongSignature() {
  */
 export async function buildAuthnExpiredChallenge() {
   return buildAuthn({expiredChallenge: true});
+}
+
+/**
+ * Build an occupational-license scenario, granted: the agent holds a valid
+ * credential asserting a recognized professional role. Models the VC
+ * Playground's occupational credentials (Medical Technician, Firefighter),
+ * proving the delegation flow is not age-specific.
+ *
+ * @returns {Promise<ScenarioInput>} The check_delegation input.
+ */
+export async function buildLicensedProfessionalPass() {
+  const credential = await issue({
+    claims: {role: 'emt', licensed: true}, expiresInSeconds: 3600
+  });
+  return {
+    credential,
+    agentDid: AGENT_DID,
+    requiredClaims: {
+      role: {$in: ['physician', 'emt', 'firefighter']},
+      licensed: true
+    }
+  };
+}
+
+/**
+ * Build an occupational-license scenario, denied: the role matches but the
+ * license flag is false.
+ *
+ * @returns {Promise<ScenarioInput>} The check_delegation input.
+ */
+export async function buildLicensedProfessionalFail() {
+  const credential = await issue({
+    claims: {role: 'emt', licensed: false}, expiresInSeconds: 3600
+  });
+  return {
+    credential,
+    agentDid: AGENT_DID,
+    requiredClaims: {
+      role: {$in: ['physician', 'emt', 'firefighter']},
+      licensed: true
+    }
+  };
+}
+
+/**
+ * Build a membership-tier scenario, granted: a numeric, non-age threshold.
+ * Models a loyalty/clearance credential, showing $gte is not age-specific.
+ *
+ * @returns {Promise<ScenarioInput>} The check_delegation input.
+ */
+export async function buildMembershipTierPass() {
+  const credential = await issue({
+    claims: {loyaltyTier: 3}, expiresInSeconds: 3600
+  });
+  return {
+    credential, agentDid: AGENT_DID, requiredClaims: {loyaltyTier: {$gte: 2}}
+  };
+}
+
+/**
+ * Build a membership-tier scenario, denied: tier below the threshold.
+ *
+ * @returns {Promise<ScenarioInput>} The check_delegation input.
+ */
+export async function buildMembershipTierFail() {
+  const credential = await issue({
+    claims: {loyaltyTier: 1}, expiresInSeconds: 3600
+  });
+  return {
+    credential, agentDid: AGENT_DID, requiredClaims: {loyaltyTier: {$gte: 2}}
+  };
+}
+
+/**
+ * Build a not-yet-valid scenario: the credential's validFrom is in the future
+ * (beyond the clock-skew tolerance), so it must be denied.
+ *
+ * @returns {Promise<ScenarioInput>} The check_delegation input.
+ */
+export async function buildNotYetValid() {
+  const credential = await issue({
+    claims: {over_21: true}, validFromInSeconds: 3600
+  });
+  return {credential, agentDid: AGENT_DID};
 }
 
 /**
