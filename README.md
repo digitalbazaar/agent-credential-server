@@ -144,8 +144,17 @@ npm run start --workspace=demo-agent -- authn     # challenge-response auth
 npm run start --workspace=demo-agent -- valid --provider=ollama
 ```
 
+> **Provider note.** Use `anthropic` for a reliable demo. The local `ollama`
+> default (`qwen2.5`) is a small model whose tool-calling is best-effort — it
+> may mis-call or skip `check_delegation`, so a single run can land on a wrong
+> or NO-DECISION verdict that `anthropic` decides correctly. This is *safe* by
+> design: the tool is the authority, so a skipped or malformed call denies
+> rather than false-grants — but it makes the `ollama` demo non-deterministic.
+> A larger `OLLAMA_MODEL` improves reliability.
+
 The agent's behaviour is guarded by a deterministic, offline **eval** (a golden
 dataset plus tool-deference and leakage canaries) that runs in CI on every push.
+The eval uses a mock model, so it is unaffected by local-model variance.
 
 ## Stack
 
