@@ -61,14 +61,11 @@ Test paths are relative to the workspace root:
 | **R-L3-1** | `mcp-server/.../vcSd.test.js`, `sdTools.test.js` | `reveals only the requested claim, hiding the rest`; `reveals only the requested flag, hiding the rest` |
 | **R-L3-2** | `mcp-server/.../vcSd.test.js`, `sdTools.test.js` | `rejects a tampered reveal document (R-L3-2)`; `denies a tampered reveal document` |
 | **R-L3-3** | `mcp-server/.../sdTools.test.js` | `verifies a genuine reveal document end-to-end` (issuer + validity present, PII absent) |
+| **R-L3-5** | `demo-agent/.../wallet.test.js`, `sdEval.test.js` | `never includes the birthdate anywhere in the reveal document`; `never leaks the birthdate in output or tool args (R-L3-5)` |
 | **R-L3-6** | `mcp-server/.../sdTools.test.js` | `rejects a request for more than two age_over_NN flags (R-L3-6)` |
 
-## Pending the Phase 2 demo (PR B)
-
-| Req | Status |
-|-----|--------|
-| **R-L3-4** (document linkability) | Demo/docs — PR B. |
-| **R-L3-5** (wallet seam, no PII to agent) | Demo wallet seam + leakage canary — PR B. |
+(R-L3-4 is a SHOULD satisfied by documentation — see `docs/phase-2-spec.md`
+§2/§6 and the README; no test applies.)
 
 ## Out of scope (later than Phase 2)
 
@@ -86,9 +83,8 @@ Test paths are relative to the workspace root:
 | L1 | R-L1-1 … R-L1-6 (6) | 6 / 6 |
 | L2 | R-L2-1 … R-L2-12 (12) | 12 / 12 |
 | Cross-cutting | R-X-1 … R-X-4 (4) | 4 / 4 |
-| L3 engine (Phase 2, this PR) | R-L3-1, -2, -3, -6 (4) | 4 / 4 |
-| **In-scope total** | **26** | **26 / 26** |
-| L3 demo (PR B) | R-L3-4, R-L3-5 (2) | pending |
+| L3 selective disclosure (Phase 2) | R-L3-1…6 (6; R-L3-4 is doc-only) | 5 / 5 tested |
+| **In-scope total** | **28** | **27 tested + 1 doc** |
 | Later | R-L3-7, R-L3-8 (2) | deferred |
 
 Every in-scope MUST/SHOULD has at least one proving test. The numbered steps of

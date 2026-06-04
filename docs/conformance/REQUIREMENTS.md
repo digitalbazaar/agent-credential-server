@@ -86,12 +86,12 @@ needed flag — never the birthdate. See `docs/phase-2-spec.md`.
 | **R-L3-3** | MUST | Mandatory claims (issuer, validity) are always present in a reveal document; substantive personal data (DOB, name) is never mandatory. | `lib/tools/issueSd.js` (`DEFAULT_MANDATORY_POINTERS`) | `sdTools.test.js` |
 | **R-L3-6** | MUST | A disclosure request for more than two `age_over_NN` flags is rejected (ISO 18013-5 reader limit). | `lib/tools/deriveDisclosure.js` | `sdTools.test.js` (R-L3-6) |
 
-Pending the Phase 2 demo (PR B):
+Demo (Phase 2, the selective-disclosure demo):
 
-| ID | Kw | Requirement | Status |
-|----|----|-------------|--------|
-| **R-L3-4** | SHOULD | Document that `ecdsa-sd-2023` presentations are linkable (unlinkability → bbs-2023). | Demo/docs (PR B) |
-| **R-L3-5** | MUST | The birthdate and other hidden fields never enter agent-side code, output, or tool-call arguments (the wallet seam). | Demo wallet seam (PR B) |
+| ID | Kw | Requirement | Enforced in | Proven by |
+|----|----|-------------|-------------|-----------|
+| **R-L3-4** | SHOULD | Document that `ecdsa-sd-2023` presentations are linkable (unlinkability → bbs-2023). | `docs/phase-2-spec.md` §2/§6, `README.md` | n/a (documentation) |
+| **R-L3-5** | MUST | The birthdate and other hidden fields never enter agent-side code, output, or tool-call arguments (the wallet seam). | `demo-agent/lib/wallet.js` (closure-held credential), `demo-agent/lib/sdTools.js` | `wallet.test.js`, `sdEval.test.js` (leakage canary) |
 
 ## Deliberately out of scope (later than Phase 2)
 

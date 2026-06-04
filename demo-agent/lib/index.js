@@ -6,9 +6,10 @@
  * Provider-agnostic — pick the model with AGENT_PROVIDER or --provider.
  *
  * Usage: `node lib/index.js <scenario> [--provider=NAME]`, where scenario is
- * one of valid, tampered, expired, or authn.
+ * one of valid, tampered, expired, authn, or sd (selective disclosure).
  */
 import * as scenarios from './scenarios.js';
+import {buildSdTools} from './sdTools.js';
 import {buildTools} from './tools.js';
 import {getModel} from './providers.js';
 import {runAgent} from './agent.js';
@@ -42,19 +43,57 @@ function providerFromArgv(argv) {
   return flag ? flag.slice('--provider='.length) : undefined;
 }
 
+/**
+ * Run the selective-disclosure demo: the agent asks the wallet to disclose only
+ * age_over_21, then verifies the reveal document. The full credential (with the
+ * birthdate) never leaves the wallet.
+ *
+ * @param {string} providerName - The resolved provider name.
+ * @param {unknown} model - The AI-SDK model.
+ * @returns {Promise<void>}
+ */
+async function runSdDemo(providerName, model) {
+  const {wallet, agentDid, revealClaims} =
+    await scenarios.buildSdAgeDisclosure();
+
+  console.log(`\nScenario: sd  |  Provider: ${providerName}`);
+  console.log(`Agent DID: ${agentDid}`);
+
+  const tools = buildSdTools({wallet});
+  const prompt =
+    'An agent must prove it is over 21 to access age-restricted content, ' +
+    'disclosing as little as possible.\n\n' +
+    `Agent DID: ${agentDid}\n` +
+    `Required claim: ${revealClaims.join(', ')}\n\n` +
+    'Ask the wallet (request_disclosure) to reveal only the required ' +
+    'claim, then call verify_disclosure on the reveal document and report ' +
+    'its verdict.';
+
+  const result = await runAgent({prompt, model, tools});
+  const called = result.toolCalls.map(c => c.name).join(', ');
+  console.log(`\nTools called: ${called}`);
+  console.log(`\nAgent: ${result.finalText}`);
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const scenarioName = args.find(a => !a.startsWith('--')) ?? 'valid';
+  const {name: providerName, model} = getModel(providerFromArgv(args));
+
+  if(scenarioName === 'sd') {
+    await runSdDemo(providerName, model);
+    return;
+  }
+
   const build = SCENARIOS[scenarioName];
   if(!build) {
     console.error(
       `Unknown scenario "${scenarioName}". ` +
-      `Try: ${Object.keys(SCENARIOS).join(', ')}.`
+      `Try: ${Object.keys(SCENARIOS).join(', ')}, sd.`
     );
     process.exit(1);
   }
 
-  const {name: providerName, model} = getModel(providerFromArgv(args));
   /** @type {import('./scenarios.js').ScenarioInput} */
   const input = await build();
   const tools = buildTools({});
