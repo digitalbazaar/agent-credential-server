@@ -28,13 +28,38 @@ export function resolveProviderName(explicit) {
 }
 
 /**
- * Build the AI-SDK model for the given provider.
+ * The API-key env var each provider requires, or null if it needs none. A
+ * provider with a key var is preflighted in getModel so a missing key fails
+ * fast with a clear message — not a cryptic error deep in the first inference
+ * call. New providers (OpenAI-compatible, etc.) add a row here.
+ *
+ * @type {Record<string, string | null>}
+ */
+const PROVIDER_KEY_ENV = {
+  anthropic: 'ANTHROPIC_API_KEY',
+  ollama: null // local, no key
+};
+
+/**
+ * Build the AI-SDK model for the given provider. Throws a clear error at
+ * startup if the provider requires an API key that is not set.
  *
  * @param {string} [explicit] - An explicit provider name; else env/default.
  * @returns {{name: string, model: unknown}} The provider name and model.
  */
 export function getModel(explicit) {
   const name = resolveProviderName(explicit);
+
+  // preflight: a provider that needs a key must have it before we do any work
+  const keyEnv = PROVIDER_KEY_ENV[name];
+  if(keyEnv && !process.env[keyEnv]) {
+    throw new Error(
+      `Provider "${name}" requires the ${keyEnv} environment variable. ` +
+      `Set it in a .env file at the repo root (see .env.example) or in your ` +
+      `environment. To run without an API key, use --provider=ollama.`
+    );
+  }
+
   switch(name) {
     case 'anthropic': {
       const id = process.env.ANTHROPIC_MODEL ?? DEFAULT_ANTHROPIC_MODEL;
@@ -54,7 +79,8 @@ export function getModel(explicit) {
     }
     default:
       throw new Error(
-        `Unknown AGENT_PROVIDER "${name}". Supported: anthropic, ollama.`
+        `Unknown AGENT_PROVIDER "${name}". Supported: ` +
+        `${Object.keys(PROVIDER_KEY_ENV).join(', ')}.`
       );
   }
 }

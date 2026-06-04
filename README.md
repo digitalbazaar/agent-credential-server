@@ -141,8 +141,23 @@ npm run start --workspace=demo-agent -- valid     # valid VC → granted
 npm run start --workspace=demo-agent -- tampered  # modified VC → denied
 npm run start --workspace=demo-agent -- expired   # past TTL → denied
 npm run start --workspace=demo-agent -- authn     # challenge-response auth
+npm run start --workspace=demo-agent -- sd         # selective disclosure (over 21, no DOB)
 npm run start --workspace=demo-agent -- valid --provider=ollama
 ```
+
+### Configuration
+
+The demo loads a `.env` file from the repo root at startup. Copy the example
+and add your key:
+
+```bash
+cp .env.example .env
+# then set ANTHROPIC_API_KEY=... in .env
+```
+
+`ollama` needs no key. If a provider that requires a key is selected without
+one, the demo fails fast at startup with a clear message (rather than a cryptic
+error mid-run).
 
 > **Provider note.** Use `anthropic` for a reliable demo. The local `ollama`
 > default (`qwen2.5`) is a small model whose tool-calling is best-effort — it
@@ -151,6 +166,25 @@ npm run start --workspace=demo-agent -- valid --provider=ollama
 > design: the tool is the authority, so a skipped or malformed call denies
 > rather than false-grants — but it makes the `ollama` demo non-deterministic.
 > A larger `OLLAMA_MODEL` improves reliability.
+
+### Adding another model provider
+
+The agent speaks the Vercel AI SDK's unified tool-calling interface, so any
+AI-SDK provider drops in. To experiment with, say, a HuggingFace-hosted model
+or another OpenAI-compatible endpoint:
+
+1. Install the provider package (e.g. `@ai-sdk/openai-compatible`, or a
+   HuggingFace/community AI-SDK provider).
+2. In `demo-agent/lib/providers.js`, add a `case` to `getModel` returning
+   `{name, model}`, and add a row to `PROVIDER_KEY_ENV` naming the API-key env
+   var the provider needs (or `null` if it needs none — like `ollama`). The
+   startup preflight then enforces the key automatically.
+3. Select it with `--provider=<name>` or `AGENT_PROVIDER=<name>`, and set any
+   key in `.env`.
+
+Nothing else changes: the tools, the eval, and the authorization logic are
+provider-agnostic. A small local or hosted model may tool-call unreliably (see
+the provider note above) — the safety guarantee holds regardless.
 
 The agent's behaviour is guarded by a deterministic, offline **eval** (a golden
 dataset plus tool-deference and leakage canaries) that runs in CI on every push.
