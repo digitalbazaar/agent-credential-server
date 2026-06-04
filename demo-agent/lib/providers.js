@@ -41,8 +41,13 @@ export function getModel(explicit) {
       return {name, model: anthropic(id)};
     }
     case 'ollama': {
-      // local, free, no API key — ideal for a runnable reference. qwen2.5 has
-      // solid tool-calling support; override with OLLAMA_MODEL.
+      // local, free, no API key — ideal for a runnable reference. qwen2.5
+      // tool-calling is best-effort: a small local model may mis-call or skip
+      // check_delegation, yielding a wrong or NO-DECISION verdict on a run that
+      // anthropic decides correctly. This is safe — the tool is authoritative,
+      // so a skipped/bad call denies rather than false-grants (R-X-1) — but it
+      // makes the ollama demo non-deterministic. Use anthropic for a reliable
+      // demo; override the model with OLLAMA_MODEL (a larger model helps).
       const ollama = createOllama();
       const id = process.env.OLLAMA_MODEL ?? DEFAULT_OLLAMA_MODEL;
       return {name, model: ollama(id)};
