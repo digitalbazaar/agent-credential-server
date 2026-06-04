@@ -38,5 +38,11 @@ declare module '@digitalbazaar/vc' {
     purpose?: unknown;
   }): Promise<VerifyCredentialResult>;
 
+  export function derive(options: {
+    verifiableCredential: Record<string, unknown>;
+    suite: unknown;
+    documentLoader: DocumentLoader;
+  }): Promise<Record<string, unknown>>;
+
   export const defaultDocumentLoader: DocumentLoader;
 }

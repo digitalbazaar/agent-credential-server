@@ -54,12 +54,28 @@ Test paths are relative to the workspace root:
 | **R-X-3** | `mcp-server/.../documentLoader.test.js` | `serves the agent credential context offline`; `returns the same cached object on repeated did:key loads`; `resolves a did:key URL to an unwrapped document` |
 | **R-X-4** | `mcp-server/.../delegate.test.js`, `revocation.test.js` | structured results throughout, e.g. `denies when required claim has wrong value`; `handles invalid encodedList` |
 
-## Out of scope (L3 / Phase 2)
+## L3 — Selective disclosure (Phase 2, ecdsa-sd-2023)
+
+| Req | Test file | Proving test(s) |
+|-----|-----------|-----------------|
+| **R-L3-1** | `mcp-server/.../vcSd.test.js`, `sdTools.test.js` | `reveals only the requested claim, hiding the rest`; `reveals only the requested flag, hiding the rest` |
+| **R-L3-2** | `mcp-server/.../vcSd.test.js`, `sdTools.test.js` | `rejects a tampered reveal document (R-L3-2)`; `denies a tampered reveal document` |
+| **R-L3-3** | `mcp-server/.../sdTools.test.js` | `verifies a genuine reveal document end-to-end` (issuer + validity present, PII absent) |
+| **R-L3-6** | `mcp-server/.../sdTools.test.js` | `rejects a request for more than two age_over_NN flags (R-L3-6)` |
+
+## Pending the Phase 2 demo (PR B)
 
 | Req | Status |
 |-----|--------|
-| **R-L3-1** (selective disclosure) | Not implemented — Phase 2 (`ecdsa-sd-2023`). |
-| **R-L3-2** (token bridging, audit trails) | Not implemented — Phase 2. |
+| **R-L3-4** (document linkability) | Demo/docs — PR B. |
+| **R-L3-5** (wallet seam, no PII to agent) | Demo wallet seam + leakage canary — PR B. |
+
+## Out of scope (later than Phase 2)
+
+| Req | Status |
+|-----|--------|
+| **R-L3-7** (unlinkability) | Not implemented — Phase 2.5 (`bbs-2023`). |
+| **R-L3-8** (token bridging, audit trails) | Not implemented. |
 
 ---
 
@@ -70,8 +86,10 @@ Test paths are relative to the workspace root:
 | L1 | R-L1-1 … R-L1-6 (6) | 6 / 6 |
 | L2 | R-L2-1 … R-L2-12 (12) | 12 / 12 |
 | Cross-cutting | R-X-1 … R-X-4 (4) | 4 / 4 |
-| **In-scope total** | **22** | **22 / 22** |
-| L3 (Phase 2) | R-L3-1 … R-L3-2 (2) | deferred |
+| L3 engine (Phase 2, this PR) | R-L3-1, -2, -3, -6 (4) | 4 / 4 |
+| **In-scope total** | **26** | **26 / 26** |
+| L3 demo (PR B) | R-L3-4, R-L3-5 (2) | pending |
+| Later | R-L3-7, R-L3-8 (2) | deferred |
 
 Every in-scope MUST/SHOULD has at least one proving test. The numbered steps of
 the `check_delegation` pipeline (`mcp-server/lib/tools/delegate.js`) map 1:1 to
