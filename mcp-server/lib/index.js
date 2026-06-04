@@ -7,10 +7,18 @@ import {z} from 'zod';
 
 import {createChallengeTool, verifyAuthTool} from './tools/auth.js';
 import {checkDelegation} from './tools/delegate.js';
+import {deriveDisclosureTool} from './tools/deriveDisclosure.js';
 import {issueCredentialTool} from './tools/issue.js';
+import {issueSdCredentialTool} from './tools/issueSd.js';
 import {resolveDIDTool} from './tools/resolve.js';
 import {verifyCredentialTool} from './tools/verify.js';
 import {verifyDelegationChainTool} from './tools/verifyChain.js';
+import {verifyDisclosureTool} from './tools/verifyDisclosure.js';
+
+/**
+ * @typedef {import('./tools/verifyDisclosure.js').VerifyDisclosureToolInput}
+ *   VerifyDisclosureToolInput
+ */
 
 process.on('unhandledRejection', reason => {
   console.error('Unhandled Rejection:', reason);
@@ -167,6 +175,76 @@ server.registerTool(
   async input => {
     const result = await verifyDelegationChainTool(
       /** @type {import("./tools/verifyChain.js").VerifyChainInput} */ (input)
+    );
+    return {content: [{type: 'text', text: JSON.stringify(result, null, 2)}]};
+  }
+);
+
+server.registerTool(
+  'issue_sd_credential',
+  {
+    description:
+      'Issue a VC 2.0 selective-disclosure credential (ecdsa-sd-2023, ' +
+      'P-256). The issuer did:key is derived from the signing key. Claims ' +
+      'should include precomputed age_over_NN flags.',
+    inputSchema: {
+      subjectDid: z.string(),
+      claims: z.record(z.string(), z.unknown())
+        .describe('Claims to embed, including age_over_NN flags'),
+      publicKeyMultibase: z.string()
+        .describe('Issuer P-256 public-key multibase'),
+      privateKeyMultibase: z.string()
+        .describe('Issuer P-256 secret-key multibase; issuer DID is derived'),
+      mandatoryPointers: z.array(z.string()).optional()
+        .describe('JSON pointers always revealed (default: issuer + validity)'),
+      expiresInSeconds: z.number().optional()
+        .describe('Optional TTL in seconds')
+    }
+  },
+  async input => {
+    const result = await issueSdCredentialTool(
+      /** @type {import("./tools/issueSd.js").IssueSdInput} */ (input)
+    );
+    return {content: [{type: 'text', text: JSON.stringify(result, null, 2)}]};
+  }
+);
+
+server.registerTool(
+  'derive_disclosure',
+  {
+    description:
+      'Derive a reveal document from a base SD credential, disclosing only ' +
+      'the requested claims. At most two age_over_NN flags per request.',
+    inputSchema: {
+      credential: z.record(z.string(), z.unknown())
+        .describe('The base SD credential (with an ecdsa-sd-2023 proof)'),
+      revealClaims: z.array(z.string())
+        .describe('credentialSubject claim names to disclose')
+    }
+  },
+  async input => {
+    const result = await deriveDisclosureTool(
+      /** @type {import("./tools/deriveDisclosure.js").DeriveDisclosureInput} */
+      (input)
+    );
+    return {content: [{type: 'text', text: JSON.stringify(result, null, 2)}]};
+  }
+);
+
+server.registerTool(
+  'verify_disclosure',
+  {
+    description:
+      'Verify a reveal document\'s derived ecdsa-sd-2023 proof and return ' +
+      'the revealed claims',
+    inputSchema: {
+      revealDocument: z.record(z.string(), z.unknown())
+        .describe('The reveal document to verify')
+    }
+  },
+  async input => {
+    const result = await verifyDisclosureTool(
+      /** @type {VerifyDisclosureToolInput} */ (input)
     );
     return {content: [{type: 'text', text: JSON.stringify(result, null, 2)}]};
   }

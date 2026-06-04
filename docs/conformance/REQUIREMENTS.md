@@ -73,12 +73,32 @@ core. Its numbered steps map 1:1 to the requirements below and fail closed.
 | **R-X-3** | MUST | The JSON-LD document loader resolves `@context` without network IO on the hot path (cached, bundled contexts, offline did:key). | `lib/core/documentLoader.js` | `documentLoader.test.js` |
 | **R-X-4** | SHOULD | Expected failures return structured result objects (`{authorized/valid: false, reason}`), not thrown exceptions. | `lib/tools/*`, `lib/core/*` | all tool/core tests |
 
-## Deliberately out of scope (L3 / Phase 2)
+## L3 — Selective disclosure (Phase 2, `ecdsa-sd-2023`)
+
+Age is modeled the ISO/IEC 18013-5 way: the issuer precomputes `age_over_NN`
+boolean flags from the DOB, and the holder selectively discloses only the
+needed flag — never the birthdate. See `docs/phase-2-spec.md`.
+
+| ID | Kw | Requirement | Enforced in | Proven by |
+|----|----|-------------|-------------|-----------|
+| **R-L3-1** | MUST | A holder can derive a presentation revealing a subset of claims, hiding the rest. | `lib/core/vcSd.js` (`deriveDisclosure`), `lib/tools/deriveDisclosure.js` | `vcSd.test.js`, `sdTools.test.js` |
+| **R-L3-2** | MUST | A derived presentation verifies only if the revealed claims were in the issuer's original signature. | `lib/core/vcSd.js` (`verifyDisclosure`) | `vcSd.test.js` (tampered), `sdTools.test.js` |
+| **R-L3-3** | MUST | Mandatory claims (issuer, validity) are always present in a reveal document; substantive personal data (DOB, name) is never mandatory. | `lib/tools/issueSd.js` (`DEFAULT_MANDATORY_POINTERS`) | `sdTools.test.js` |
+| **R-L3-6** | MUST | A disclosure request for more than two `age_over_NN` flags is rejected (ISO 18013-5 reader limit). | `lib/tools/deriveDisclosure.js` | `sdTools.test.js` (R-L3-6) |
+
+Pending the Phase 2 demo (PR B):
+
+| ID | Kw | Requirement | Status |
+|----|----|-------------|--------|
+| **R-L3-4** | SHOULD | Document that `ecdsa-sd-2023` presentations are linkable (unlinkability → bbs-2023). | Demo/docs (PR B) |
+| **R-L3-5** | MUST | The birthdate and other hidden fields never enter agent-side code, output, or tool-call arguments (the wallet seam). | Demo wallet seam (PR B) |
+
+## Deliberately out of scope (later than Phase 2)
 
 | ID | Requirement | Why deferred |
 |----|-------------|--------------|
-| R-L3-1 | Selective disclosure (prove `over_21` without revealing the rest). | Needs `ecdsa-sd-2023` (ECDSA keys, not Ed25519). Phase 2. |
-| R-L3-2 | Credential-to-token bridging + audit trails. | L3 service-side concern. Phase 2. |
+| R-L3-7 | Unlinkable presentations (a verifier cannot correlate two derivations). | Needs `bbs-2023` (BLS12-381 keys). Phase 2.5. |
+| R-L3-8 | Credential-to-token bridging + audit trails. | L3 service-side concern. |
 
 ---
 
