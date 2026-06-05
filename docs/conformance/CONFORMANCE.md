@@ -43,7 +43,7 @@ Test paths are relative to the workspace root:
 | **R-L2-9** | `mcp-server/.../claimPredicates.test.js`, `delegate.test.js` | `returns satisfied when all predicates pass`; `authorizes when predicate $gte is satisfied`; `denies when required claim is missing from VC` |
 | **R-L2-10** | `mcp-server/.../claimPredicates.test.js` | `numeric-looking string fails $gte`; `boolean true fails $gt (no coercion to 1)`; `null fails $gte (no coercion to 0)`; `number is not in a string set` |
 | **R-L2-11** | `mcp-server/.../verifyChain.test.js` | `authorizes a valid 2-hop chain`; `authorizes a valid 3-hop chain`; `denies when the leaf controller is not the expected agent` |
-| **R-L2-12** | `mcp-server/.../verifyChain.test.js` | `denies a delegation whose expiry was extended`; `denies when the root capability does not match`; `denies a tampered delegation` |
+| **R-L2-12** | `mcp-server/.../verifyChain.test.js` | `denies a delegation whose expiry was extended`; `denies when the root capability does not match`; `denies a tampered delegation`; `denies when the expected action is not what the capability permits` |
 
 ## Cross-cutting
 

@@ -24,9 +24,9 @@ import {makeDidKeyDriver} from './didKeyContext.js';
  * @typedef {object} VerifyChainInput
  * @property {RootCapability} rootCapability - The root capability the chain
  *   must descend from.
- * @property {Record<string, unknown> & {controller?: string}}
- *   delegatedCapability - The leaf delegated capability presented by the agent
- *   (it embeds its parent chain).
+ * @property {Record<string, unknown> & {controller?: string,
+ *   allowedAction?: string | string[]}} delegatedCapability - The leaf
+ *   delegated capability presented by the agent (it embeds its parent chain).
  * @property {string} agentDid - The DID that must control the leaf capability.
  * @property {string} expectedAction - The action the chain must allow.
  * @property {string} expectedTarget - The invocation target the chain covers.
@@ -60,6 +60,23 @@ export async function verifyDelegationChainTool(input) {
   });
   if(!leafCheck.valid) {
     return {authorized: false, reason: leafCheck.reason ?? 'Wrong leaf agent'};
+  }
+
+  // 1b. The leaf must permit the requested action. zcap's CapabilityDelegation
+  //    checks allowedAction *attenuation between parent and child*, but does
+  //    NOT match it against a verifier-supplied expectedAction — so we enforce
+  //    that explicitly here (a capability with no allowedAction permits any).
+  // KYA-OS R-L2-12: reject an action the leaf capability does not permit.
+  const {allowedAction} = delegatedCapability;
+  const permitsAction = allowedAction === undefined ||
+    (Array.isArray(allowedAction) ?
+      allowedAction.includes(expectedAction) :
+      allowedAction === expectedAction);
+  if(!permitsAction) {
+    return {
+      authorized: false,
+      reason: `Capability does not permit action "${expectedAction}"`
+    };
   }
 
   // 2. Verify the delegation chain: proofs, continuity, expiry attenuation,
