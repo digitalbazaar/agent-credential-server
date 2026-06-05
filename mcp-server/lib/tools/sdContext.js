@@ -2,74 +2,121 @@
  * Copyright (c) 2026 Digital Bazaar, Inc.
  */
 /**
- * Tool-layer IO seam for the selective-disclosure (ecdsa-sd-2023) path: build a
- * P-256 did:key driver, a document loader that resolves did:key offline, and
- * derive a P-256 did:key issuer from a secret-key multibase. The ECDSA analog
- * of didKeyContext.js; purely additive (Phase 2).
+ * Tool-layer IO seam for the selective-disclosure paths: build a did:key
+ * driver, a document loader that resolves did:key offline, and derive an
+ * issuer from a keypair multibase. Cryptosuite-aware — ecdsa-sd-2023 uses
+ * P-256 ECDSA keys (zDna), bbs-2023 uses BLS12-381 keys (zUC7) — so the same
+ * seam serves both. Purely additive (Phase 2/2.5).
  */
+import * as Bls12381Multikey from '@digitalbazaar/bls12-381-multikey';
 import * as EcdsaMultikey from '@digitalbazaar/ecdsa-multikey';
-import * as vcjs from '@digitalbazaar/vc';
+import {BLS_MULTIKEY_HEADER, importBlsMultikey} from '../core/bls.js';
 import {ECDSA_MULTIKEY_HEADER, importEcdsaMultikey} from '../core/ecdsa.js';
 import {createDocumentLoader} from '../core/documentLoader.js';
+import {defaultDocumentLoader} from '@digitalbazaar/vc';
 import {driver as didKeyDriverFactory} from '@digitalbazaar/did-method-key';
 
 /**
  * @typedef {import('../core/documentLoader.js').DocumentLoader} DocumentLoader
+ * @typedef {import('../core/vcSd.js').SdCryptosuite} SdCryptosuite
+ */
+
+// Per-cryptosuite key wiring: the did:key multibase header, the multikey
+// module's `from` (for the driver), and the project's import helper (which
+// validates the header). One row per supported SD cryptosuite.
+/** @type {Record<string, SdKeyWiring>} */
+const SD_KEYS = {
+  'ecdsa-sd-2023': {
+    header: ECDSA_MULTIKEY_HEADER,
+    fromMultibase: EcdsaMultikey.from,
+    importMultikey: importEcdsaMultikey
+  },
+  'bbs-2023': {
+    header: BLS_MULTIKEY_HEADER,
+    fromMultibase: Bls12381Multikey.from,
+    importMultikey: importBlsMultikey
+  }
+};
+
+/**
+ * @typedef {object} SdKeyWiring
+ * @property {string} header - The did:key multibase header.
+ * @property {(key: any) => Promise<any>} fromMultibase - The multikey module's
+ *   `from`, for the did:key driver.
+ * @property {(key: any) => Promise<any>} importMultikey - The project's
+ *   header-validating import helper.
  */
 
 /**
- * Build a did:key driver wired for P-256 ECDSA multikeys.
+ * Resolve the key wiring for a cryptosuite, defaulting to ecdsa-sd-2023.
  *
+ * @param {SdCryptosuite} [cryptosuite] - The SD cryptosuite.
+ * @returns {SdKeyWiring} The key wiring.
+ */
+function resolveKeyWiring(cryptosuite = 'ecdsa-sd-2023') {
+  const wiring = SD_KEYS[cryptosuite];
+  if(!wiring) {
+    throw new Error(
+      `Unknown cryptosuite "${cryptosuite}". Supported: ` +
+      `${Object.keys(SD_KEYS).join(', ')}.`);
+  }
+  return wiring;
+}
+
+/**
+ * Build a did:key driver wired for the cryptosuite's key type.
+ *
+ * @param {SdCryptosuite} [cryptosuite] - The SD cryptosuite.
  * @returns {import('@digitalbazaar/did-method-key').DidKeyDriver} The driver.
  */
-export function makeEcdsaDidKeyDriver() {
+export function makeSdDidKeyDriver(cryptosuite) {
+  const {header, fromMultibase} = resolveKeyWiring(cryptosuite);
   const driver = didKeyDriverFactory();
-  driver.use({
-    multibaseMultikeyHeader: ECDSA_MULTIKEY_HEADER,
-    fromMultibase: EcdsaMultikey.from
-  });
+  driver.use({multibaseMultikeyHeader: header, fromMultibase});
   return driver;
 }
 
 /**
- * Build a cached document loader that resolves P-256 did:key offline and falls
- * back to the @digitalbazaar/vc default loader for standard contexts.
+ * Build a cached document loader that resolves the cryptosuite's did:key
+ * offline and falls back to the @digitalbazaar/vc default loader.
  *
- * @param {import('@digitalbazaar/did-method-key').DidKeyDriver} [driver] - An
- *   optional pre-built P-256 did:key driver; one is created if omitted.
+ * @param {import('@digitalbazaar/did-method-key').DidKeyDriver} [driver] - A
+ *   pre-built did:key driver; one is created (ecdsa) if omitted.
  * @returns {DocumentLoader} The document loader.
  */
-export function makeEcdsaDocumentLoader(driver = makeEcdsaDidKeyDriver()) {
+export function makeSdDocumentLoader(driver = makeSdDidKeyDriver()) {
   return createDocumentLoader({
     didKeyDriver: driver,
-    fallbackLoader: vcjs.defaultDocumentLoader
+    fallbackLoader: defaultDocumentLoader
   });
 }
 
 /**
- * @typedef {object} EcdsaDidKeyIssuer
- * @property {string} did The derived P-256 did:key issuer DID.
+ * @typedef {object} SdDidKeyIssuer
+ * @property {string} did The derived did:key issuer DID.
  * @property {object} signer The assertion-method signer for the key.
  */
 
 /**
- * @typedef {object} EcdsaKeyMaterial
- * @property {string} publicKeyMultibase The P-256 public-key multibase.
- * @property {string} secretKeyMultibase The P-256 secret-key multibase.
+ * @typedef {object} SdKeyMaterial
+ * @property {string} publicKeyMultibase The public-key multibase.
+ * @property {string} secretKeyMultibase The secret-key multibase.
  */
 
 /**
- * Derive a P-256 did:key issuer (DID + signer) from its keypair multibase.
- * ECDSA multikeys cannot reconstruct the public key from the secret alone, so
- * both multibase parts are required.
+ * Derive a did:key issuer (DID + signer) from its keypair multibase, for the
+ * given cryptosuite's key type. Both multibase parts are required (neither
+ * ECDSA nor BLS reconstructs the public key from the secret alone).
  *
- * @param {EcdsaKeyMaterial} keyMaterial - The P-256 keypair multibase.
+ * @param {SdKeyMaterial} keyMaterial - The keypair multibase.
  * @param {import('@digitalbazaar/did-method-key').DidKeyDriver} driver - The
- *   P-256 did:key driver used to derive the DID document.
- * @returns {Promise<EcdsaDidKeyIssuer>} The issuer DID and its signer.
+ *   did:key driver matching the key type.
+ * @param {SdCryptosuite} [cryptosuite] - The SD cryptosuite.
+ * @returns {Promise<SdDidKeyIssuer>} The issuer DID and its signer.
  */
-export async function deriveEcdsaDidKeyIssuer(keyMaterial, driver) {
-  const keyPair = await importEcdsaMultikey(keyMaterial);
+export async function deriveSdDidKeyIssuer(keyMaterial, driver, cryptosuite) {
+  const {importMultikey} = resolveKeyWiring(cryptosuite);
+  const keyPair = await importMultikey(keyMaterial);
   const {didDocument, methodFor} = await driver.fromKeyPair({
     verificationKeyPair: keyPair
   });
