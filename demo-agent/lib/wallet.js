@@ -15,9 +15,15 @@
 import {deriveDisclosureTool} from 'mcp-server/lib/tools/deriveDisclosure.js';
 
 /**
+ * @typedef {import('mcp-server/lib/core/vcSd.js').SdCryptosuite} SdCryptosuite
+ */
+
+/**
  * @typedef {object} Wallet
  * @property {(claims: string[]) => Promise<Record<string, unknown>>}
  *   requestDisclosure - Derive a reveal document disclosing only `claims`.
+ * @property {SdCryptosuite} cryptosuite - The SD cryptosuite the held
+ *   credential was issued under (so the verifier can match it).
  */
 
 /**
@@ -26,12 +32,17 @@ import {deriveDisclosureTool} from 'mcp-server/lib/tools/deriveDisclosure.js';
  * exposed as a property — the only way out is a derived reveal document.
  *
  * @param {Record<string, unknown>} credential - The full base SD credential.
+ * @param {SdCryptosuite} [cryptosuite] - The SD cryptosuite the credential was
+ *   issued under; defaults to ecdsa-sd-2023.
  * @returns {Wallet} The wallet seam.
  */
-export function createWallet(credential) {
+export function createWallet(credential, cryptosuite = 'ecdsa-sd-2023') {
   return Object.freeze({
+    cryptosuite,
     requestDisclosure(claims) {
-      return deriveDisclosureTool({credential, revealClaims: claims});
+      return deriveDisclosureTool({
+        credential, revealClaims: claims, cryptosuite
+      });
     }
   });
 }

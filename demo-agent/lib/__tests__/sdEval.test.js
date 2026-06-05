@@ -129,3 +129,50 @@ describe('demo-agent SD eval: leakage canary', () => {
     expect(allArgs).not.toContain(sentinel);
   });
 });
+
+describe('demo-agent SD eval: unlinkable disclosure (bbs-2023)', () => {
+  it('grants via a bbs-2023 reveal document, disclosing only age_over_21',
+    async () => {
+      const {wallet, revealClaims} =
+        await scenarios.buildSdUnlinkableDisclosure();
+      expect(wallet.cryptosuite).toBe('bbs-2023');
+      /** @type {{reveal: object | null, valid: boolean | null}} */
+      const relay = {reveal: null, valid: null};
+      const tools = buildSdTools({
+        wallet,
+        onDisclosure: reveal => {
+          relay.reveal = reveal;
+        },
+        onVerify: result => {
+          relay.valid = result.valid;
+        }
+      });
+      const model = modelThatDisclosesAndVerifies(revealClaims, relay);
+
+      const result = await runAgent({
+        prompt: 'Prove the agent is over 21 with minimal, unlinkable ' +
+          'disclosure.',
+        model, tools
+      });
+
+      expect(result.toolCalls.map(c => c.name)).toContain('verify_disclosure');
+      expect(relay.valid).toBe(true);
+      expect(result.finalText).toContain('GRANTED');
+      const subject = /** @type {Record<string, unknown>} */ (
+        /** @type {any} */ (relay.reveal).credentialSubject
+      );
+      expect(subject.age_over_21).toBe(true);
+      expect(subject.birthdate).toBeUndefined();
+    });
+
+  it('produces unlinkable disclosures: two requests to the wallet yield ' +
+    'different proofs (R-L3-7)', async () => {
+    const {wallet, revealClaims} =
+      await scenarios.buildSdUnlinkableDisclosure();
+    const a = await wallet.requestDisclosure(revealClaims);
+    const b = await wallet.requestDisclosure(revealClaims);
+    const proofA = /** @type {{proof: {proofValue: string}}} */ (a).proof;
+    const proofB = /** @type {{proof: {proofValue: string}}} */ (b).proof;
+    expect(proofA.proofValue).not.toEqual(proofB.proofValue);
+  });
+});

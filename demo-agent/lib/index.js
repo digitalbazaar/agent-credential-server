@@ -67,21 +67,26 @@ function providerFromArgv(argv) {
 }
 
 /**
- * Run the selective-disclosure demo: the agent asks the wallet to disclose only
+ * Run a selective-disclosure demo: the agent asks the wallet to disclose only
  * age_over_21, then verifies the reveal document. The full credential (with the
- * birthdate) never leaves the wallet.
+ * birthdate) never leaves the wallet. The `unlinkable` variant uses bbs-2023,
+ * so the disclosure also cannot be correlated across uses.
  *
+ * @param {string} scenarioName - 'sd' or 'sd-unlinkable'.
  * @param {string} providerName - The resolved provider name.
  * @param {unknown} model - The AI-SDK model.
  * @returns {Promise<void>}
  */
-async function runSdDemo(providerName, model) {
-  step('Issuing an SD credential into the holder wallet…');
-  const {wallet, agentDid, revealClaims} =
+async function runSdDemo(scenarioName, providerName, model) {
+  const unlinkable = scenarioName === 'sd-unlinkable';
+  step(`Issuing a ${unlinkable ? 'bbs-2023 (unlinkable) ' : ''}SD credential ` +
+    'into the holder wallet…');
+  const {wallet, agentDid, revealClaims} = unlinkable ?
+    await scenarios.buildSdUnlinkableDisclosure() :
     await scenarios.buildSdAgeDisclosure();
 
-  console.log(`\nScenario: sd  |  Provider: ${providerName}`);
-  console.log(`Agent DID: ${agentDid}`);
+  console.log(`\nScenario: ${scenarioName}  |  Provider: ${providerName}`);
+  console.log(`Agent DID: ${agentDid}  |  Cryptosuite: ${wallet.cryptosuite}`);
 
   const tools = buildSdTools({wallet});
   const prompt =
@@ -108,8 +113,8 @@ async function main() {
   const scenarioName = args.find(a => !a.startsWith('--')) ?? 'valid';
   const {name: providerName, model} = getModel(providerFromArgv(args));
 
-  if(scenarioName === 'sd') {
-    await runSdDemo(providerName, model);
+  if(scenarioName === 'sd' || scenarioName === 'sd-unlinkable') {
+    await runSdDemo(scenarioName, providerName, model);
     return;
   }
 
@@ -117,7 +122,7 @@ async function main() {
   if(!build) {
     console.error(
       `Unknown scenario "${scenarioName}". ` +
-      `Try: ${Object.keys(SCENARIOS).join(', ')}, sd.`
+      `Try: ${Object.keys(SCENARIOS).join(', ')}, sd, sd-unlinkable.`
     );
     process.exit(1);
   }

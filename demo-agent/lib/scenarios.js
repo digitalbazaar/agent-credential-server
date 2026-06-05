@@ -19,6 +19,7 @@ import {generateChallenge, signingInput}
 import {generateKeyPair, sign, toBase64url}
   from 'mcp-server/lib/core/crypto.js';
 import {createWallet} from './wallet.js';
+import {generateBlsMultikey} from 'mcp-server/lib/core/bls.js';
 import {generateEcdsaMultikey} from 'mcp-server/lib/core/ecdsa.js';
 import {issueCredentialTool} from 'mcp-server/lib/tools/issue.js';
 import {issueSdCredentialTool} from 'mcp-server/lib/tools/issueSd.js';
@@ -383,15 +384,24 @@ export async function buildWithSentinelSecret() {
  */
 
 /**
+ * @typedef {import('mcp-server/lib/core/vcSd.js').SdCryptosuite} SdCryptosuite
+ */
+
+/**
  * Issue an SD credential carrying the ISO age_over_NN flags + hidden PII into a
- * wallet. The full credential (with birthdate) stays inside the wallet.
+ * wallet. The full credential (with birthdate) stays inside the wallet. The
+ * key type matches the cryptosuite: P-256 for ecdsa-sd-2023, BLS for bbs-2023.
  *
  * @param {object} [options] - Issuance options.
  * @param {Record<string, unknown>} [options.claims] - Override the claims.
+ * @param {SdCryptosuite} [options.cryptosuite] - The SD cryptosuite; defaults
+ *   to ecdsa-sd-2023.
  * @returns {Promise<Wallet>} A wallet holding the issued credential.
  */
 async function issueSdIntoWallet(options = {}) {
-  const key = await generateEcdsaMultikey();
+  const cryptosuite = options.cryptosuite ?? 'ecdsa-sd-2023';
+  const key = cryptosuite === 'bbs-2023' ?
+    await generateBlsMultikey() : await generateEcdsaMultikey();
   const exported = /** @type {{
    *   publicKeyMultibase: string, secretKeyMultibase: string
    * }} */ (await key.export({publicKey: true, secretKey: true}));
@@ -406,9 +416,10 @@ async function issueSdIntoWallet(options = {}) {
     },
     publicKeyMultibase: exported.publicKeyMultibase,
     privateKeyMultibase: exported.secretKeyMultibase,
-    expiresInSeconds: 3600
+    expiresInSeconds: 3600,
+    cryptosuite
   });
-  return createWallet(credential);
+  return createWallet(credential, cryptosuite);
 }
 
 /**
@@ -419,6 +430,18 @@ async function issueSdIntoWallet(options = {}) {
  */
 export async function buildSdAgeDisclosure() {
   const wallet = await issueSdIntoWallet();
+  return {wallet, agentDid: AGENT_DID, revealClaims: ['age_over_21']};
+}
+
+/**
+ * Build an unlinkable selective-disclosure scenario: like
+ * buildSdAgeDisclosure but issued under bbs-2023, so two disclosures of
+ * age_over_21 cannot be correlated by a verifier.
+ *
+ * @returns {Promise<SdScenarioInput>} The SD scenario (bbs-2023).
+ */
+export async function buildSdUnlinkableDisclosure() {
+  const wallet = await issueSdIntoWallet({cryptosuite: 'bbs-2023'});
   return {wallet, agentDid: AGENT_DID, revealClaims: ['age_over_21']};
 }
 

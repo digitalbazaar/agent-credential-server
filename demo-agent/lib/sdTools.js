@@ -52,14 +52,16 @@ export function buildSdTools(options) {
     }),
     verify_disclosure: tool({
       description:
-        'Verify a reveal document\'s derived ecdsa-sd-2023 proof. This is ' +
-        'the authoritative decision.',
+        'Verify a reveal document\'s derived selective-disclosure proof. ' +
+        'This is the authoritative decision.',
       inputSchema: z.object({
         revealDocument: z.record(z.string(), z.unknown())
       }),
       execute: async ({revealDocument}) => {
+        // verify under the same cryptosuite the wallet's credential uses, so
+        // the verifier and holder agree on the suite (ecdsa-sd-2023 | bbs-2023)
         const result = await verifyDisclosureTool(
-          /** @type {any} */ ({revealDocument})
+          /** @type {any} */ ({revealDocument, cryptosuite: wallet.cryptosuite})
         );
         if(onVerify) {
           onVerify(result);
