@@ -15,9 +15,9 @@
  * The flow is identical; only the factory trio and the key type differ.
  *
  * KYA-OS R-L3-1: a holder derives a presentation revealing a subset of claims.
- * R-L3-2: a derived presentation verifies only if the revealed claims were in
- * the issuer's original signature. R-L3-7: bbs-2023 presentations are
- * unlinkable.
+ * R-L3-2 / R-L3-9: a derived presentation (ecdsa-sd-2023 / bbs-2023) verifies
+ * only if the revealed claims were in the issuer's original signature.
+ * R-L3-7: bbs-2023 presentations are unlinkable.
  */
 import * as bbs2023 from '@digitalbazaar/bbs-2023-cryptosuite';
 import * as ecdsaSd2023 from '@digitalbazaar/ecdsa-sd-2023-cryptosuite';

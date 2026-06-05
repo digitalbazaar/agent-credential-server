@@ -67,11 +67,17 @@ Test paths are relative to the workspace root:
 (R-L3-4 is a SHOULD satisfied by documentation — see `docs/phase-2-spec.md`
 §2/§6 and the README; no test applies.)
 
-## Out of scope (later than Phase 2)
+## L3 — Unlinkable selective disclosure (Phase 2.5, bbs-2023)
+
+| Req | Test file | Proving test(s) |
+|-----|-----------|-----------------|
+| **R-L3-7** | `mcp-server/.../vcSd.test.js`, `sdTools.test.js`; `demo-agent/.../sdEval.test.js` | `produces unlinkable derivations: two reveals differ yet both verify (R-L3-7)`; `produces unlinkable derivations through the tool layer (R-L3-7)`; `produces unlinkable disclosures: two requests to the wallet yield different proofs (R-L3-7)` |
+| **R-L3-9** | `mcp-server/.../vcSd.test.js`, `sdTools.test.js` | `rejects a tampered bbs-2023 reveal document`; `issues, derives, and verifies end-to-end` |
+
+## Out of scope
 
 | Req | Status |
 |-----|--------|
-| **R-L3-7** (unlinkability) | Not implemented — Phase 2.5 (`bbs-2023`). |
 | **R-L3-8** (token bridging, audit trails) | Not implemented. |
 
 ---
@@ -84,8 +90,9 @@ Test paths are relative to the workspace root:
 | L2 | R-L2-1 … R-L2-12 (12) | 12 / 12 |
 | Cross-cutting | R-X-1 … R-X-4 (4) | 4 / 4 |
 | L3 selective disclosure (Phase 2) | R-L3-1…6 (6; R-L3-4 is doc-only) | 5 / 5 tested |
-| **In-scope total** | **28** | **27 tested + 1 doc** |
-| Later | R-L3-7, R-L3-8 (2) | deferred |
+| L3 unlinkable disclosure (Phase 2.5) | R-L3-7, R-L3-9 (2) | 2 / 2 tested |
+| **In-scope total** | **30** | **29 tested + 1 doc** |
+| Later | R-L3-8 (1) | deferred |
 
 Every in-scope MUST/SHOULD has at least one proving test. The numbered steps of
 the `check_delegation` pipeline (`mcp-server/lib/tools/delegate.js`) map 1:1 to

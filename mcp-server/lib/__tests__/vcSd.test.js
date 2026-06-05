@@ -16,6 +16,11 @@ import {createDocumentLoader} from '../core/documentLoader.js';
 import {defaultDocumentLoader} from '@digitalbazaar/vc';
 import {driver as didKeyDriverFactory} from '@digitalbazaar/did-method-key';
 import {ECDSA_MULTIKEY_HEADER} from '../core/ecdsa.js';
+import {jest} from '@jest/globals';
+
+// BBS operations (BLS12-381 sign/derive/verify) are CPU-heavy; give this suite
+// headroom over the 5s default so it stays reliable under parallel CI load.
+jest.setTimeout(15000);
 
 /**
  * @typedef {import('../core/documentLoader.js').DocumentLoader} DocumentLoader
