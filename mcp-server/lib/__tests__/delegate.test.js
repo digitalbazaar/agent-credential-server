@@ -53,7 +53,7 @@ async function deriveDidKey(kp) {
  */
 async function makeVC(options = {}) {
   const {
-    claims = {age_verified: true, over_21: true},
+    claims = {age_over_21: true},
     expiresInSeconds,
     validFromInSeconds,
     subjectDid = AGENT_DID
@@ -78,7 +78,7 @@ describe('checkDelegation', () => {
         agentDid: AGENT_DID,
         requestedAction: ACTION,
         credential,
-        requiredClaims: {age_verified: true, over_21: true}
+        requiredClaims: {age_over_21: true}
       });
       expect(result.authorized).toBe(true);
       expect(result.reason).toMatch(AGENT_DID);
@@ -106,33 +106,33 @@ describe('checkDelegation', () => {
   });
 
   it('denies when required claim is missing from VC', async () => {
-    const credential = await makeVC({claims: {age_verified: true}});
+    const credential = await makeVC({claims: {age_over_18: true}});
     const result = await checkDelegation({
       agentDid: AGENT_DID,
       requestedAction: ACTION,
       credential,
-      requiredClaims: {over_21: true}
+      requiredClaims: {age_over_21: true}
     });
     expect(result.authorized).toBe(false);
-    expect(result.reason).toMatch(/over_21/);
+    expect(result.reason).toMatch(/age_over_21/);
   });
 
   it('denies when required claim has wrong value', async () => {
-    const credential = await makeVC({claims: {over_21: false}});
+    const credential = await makeVC({claims: {age_over_21: false}});
     const result = await checkDelegation({
       agentDid: AGENT_DID,
       requestedAction: ACTION,
       credential,
-      requiredClaims: {over_21: true}
+      requiredClaims: {age_over_21: true}
     });
     expect(result.authorized).toBe(false);
-    expect(result.reason).toMatch(/over_21/);
+    expect(result.reason).toMatch(/age_over_21/);
   });
 
   it('denies when VC is expired', async () => {
     // expire well beyond the 300s default clock skew
     const credential = await makeVC({
-      claims: {over_21: true}, expiresInSeconds: -3600
+      claims: {age_over_21: true}, expiresInSeconds: -3600
     });
     const result = await checkDelegation({
       agentDid: AGENT_DID,
@@ -146,7 +146,7 @@ describe('checkDelegation', () => {
   it('denies when VC is not yet valid', async () => {
     // validFrom well beyond the 300s default clock skew
     const credential = await makeVC({
-      claims: {over_21: true}, validFromInSeconds: 3600
+      claims: {age_over_21: true}, validFromInSeconds: 3600
     });
     const result = await checkDelegation({
       agentDid: AGENT_DID,
@@ -158,10 +158,10 @@ describe('checkDelegation', () => {
   });
 
   it('denies when the credentialSubject is tampered', async () => {
-    const credential = await makeVC({claims: {over_21: true}});
+    const credential = await makeVC({claims: {age_over_21: true}});
     // mutate a signed claim — the Data Integrity proof no longer verifies
     const tampered = JSON.parse(JSON.stringify(credential));
-    tampered.credentialSubject.over_21 = false;
+    tampered.credentialSubject.age_over_21 = false;
     const result = await checkDelegation({
       agentDid: AGENT_DID,
       requestedAction: ACTION,
@@ -172,7 +172,7 @@ describe('checkDelegation', () => {
   });
 
   it('denies when the issuer is swapped to an unrelated DID', async () => {
-    const credential = await makeVC({claims: {over_21: true}});
+    const credential = await makeVC({claims: {age_over_21: true}});
     // point issuer at a different did:key — the proof was made by the
     // original key, so verification against the new issuer fails
     const forged = JSON.parse(JSON.stringify(credential));
@@ -240,7 +240,7 @@ describe('checkDelegation: authProof', () => {
 
   it('authorizes when authProof is valid', async () => {
     const credential = await makeVC({
-      claims: {over_21: true}, subjectDid: agentDid
+      claims: {age_over_21: true}, subjectDid: agentDid
     });
     const token = generateChallenge(agentDid);
     const sigBytes = await sign(signingInput(token), agentKp.privateKey);
@@ -261,7 +261,7 @@ describe('checkDelegation: authProof', () => {
   it('denies when authProof signature is wrong', async () => {
     const wrongKp = await generateKeyPair();
     const credential = await makeVC({
-      claims: {over_21: true}, subjectDid: agentDid
+      claims: {age_over_21: true}, subjectDid: agentDid
     });
     const token = generateChallenge(agentDid);
     const sigBytes = await sign(signingInput(token), wrongKp.privateKey);
@@ -282,7 +282,7 @@ describe('checkDelegation: authProof', () => {
 
   it('denies when authProof challenge is expired', async () => {
     const credential = await makeVC({
-      claims: {over_21: true}, subjectDid: agentDid
+      claims: {age_over_21: true}, subjectDid: agentDid
     });
     const expiredToken = {
       nonce: 'n', agentDid, issuedAt: 100, expiresAt: 200
@@ -310,7 +310,7 @@ describe('checkDelegation: authProof', () => {
     });
     const unresolvable = 'did:web:missing.example.com';
     const credential = await makeVC({
-      claims: {over_21: true}, subjectDid: unresolvable
+      claims: {age_over_21: true}, subjectDid: unresolvable
     });
     const token = generateChallenge(unresolvable);
     const sigBytes = await sign(signingInput(token), agentKp.privateKey);

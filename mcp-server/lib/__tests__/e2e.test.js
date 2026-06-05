@@ -36,14 +36,14 @@ describe('E2E: full delegation flow', () => {
   it('valid VC → ACCESS GRANTED', async () => {
     const credential = await issueTo({
       subjectDid: AGENT_DID,
-      claims: {age_verified: true, over_21: true},
+      claims: {age_over_21: true},
       expiresInSeconds: 3600
     });
     const result = await checkDelegation({
       agentDid: AGENT_DID,
       requestedAction: ACTION,
       credential,
-      requiredClaims: {age_verified: true, over_21: true}
+      requiredClaims: {age_over_21: true}
     });
     expect(result.authorized).toBe(true);
     expect(result.reason).toMatch(AGENT_DID);
@@ -51,10 +51,10 @@ describe('E2E: full delegation flow', () => {
 
   it('tampered VC → ACCESS DENIED (proof mismatch)', async () => {
     const credential = await issueTo({
-      subjectDid: AGENT_DID, claims: {over_21: true}, expiresInSeconds: 3600
+      subjectDid: AGENT_DID, claims: {age_over_21: true}, expiresInSeconds: 3600
     });
     const tampered = JSON.parse(JSON.stringify(credential));
-    tampered.credentialSubject.over_21 = false;
+    tampered.credentialSubject.age_over_21 = false;
     const result = await checkDelegation({
       agentDid: AGENT_DID,
       requestedAction: ACTION,
@@ -66,7 +66,9 @@ describe('E2E: full delegation flow', () => {
 
   it('expired VC → ACCESS DENIED (with expiry reason)', async () => {
     const credential = await issueTo({
-      subjectDid: AGENT_DID, claims: {over_21: true}, expiresInSeconds: -3600
+      subjectDid: AGENT_DID,
+      claims: {age_over_21: true},
+      expiresInSeconds: -3600
     });
     const result = await checkDelegation({
       agentDid: AGENT_DID,
@@ -81,7 +83,9 @@ describe('E2E: full delegation flow', () => {
     const realAgentDid = 'did:key:z6MkRealAgent';
     const impostor = 'did:key:z6MkImpostor';
     const credential = await issueTo({
-      subjectDid: realAgentDid, claims: {over_21: true}, expiresInSeconds: 3600
+      subjectDid: realAgentDid,
+      claims: {age_over_21: true},
+      expiresInSeconds: 3600
     });
     const result = await checkDelegation({
       agentDid: impostor,
