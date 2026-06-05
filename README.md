@@ -120,16 +120,24 @@ npm run start --workspace=demo-agent -- expired   # past TTL → denied
 
 ## Demo Scenario
 
-A human issues a short-lived age-verification credential to an agent:
+A human issues a short-lived age-verification credential to an agent. Age is
+modeled the way mobile driver's licenses do (ISO/IEC 18013-5): the issuer
+precomputes boolean `age_over_NN` flags from the date of birth, so a verifier
+checks `age_over_21` without ever seeing the birthdate:
 
 ```json
-{ "age_verified": true, "over_21": true }
+{ "age_over_21": true }
 ```
 
 1. The human's DID signs a VC asserting the agent's age claims
 2. The agent presents the VC when requesting age-restricted access
 3. The MCP server verifies the credential and checks the required claims
 4. Access granted or denied - with a reason, tied to a signed credential
+
+The selective-disclosure demo (`sd`, `sd-unlinkable`) takes this further: the
+holder reveals only `age_over_21` and the verifier never receives the birthdate
+or any other claim. See [Other models](#other-models-openai-compatible) and the
+[L2 walkthrough](./docs/L2.md).
 
 The demo agent is **model-agnostic** (built on the Vercel AI SDK) and never
 decides access itself: it calls the `check_delegation` tool and reports that

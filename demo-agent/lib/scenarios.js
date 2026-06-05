@@ -70,12 +70,12 @@ async function issue(options) {
  */
 export async function buildValid() {
   const credential = await issue({
-    claims: {age_verified: true, over_21: true}, expiresInSeconds: 3600
+    claims: {age_over_21: true}, expiresInSeconds: 3600
   });
   return {
     credential,
     agentDid: AGENT_DID,
-    requiredClaims: {age_verified: true, over_21: true}
+    requiredClaims: {age_over_21: true}
   };
 }
 
@@ -86,7 +86,7 @@ export async function buildValid() {
  */
 export async function buildValidNoClaims() {
   const credential = await issue({
-    claims: {age_verified: true, over_21: true}, expiresInSeconds: 3600
+    claims: {age_over_21: true}, expiresInSeconds: 3600
   });
   return {credential, agentDid: AGENT_DID};
 }
@@ -98,7 +98,7 @@ export async function buildValidNoClaims() {
  */
 export async function buildExpired() {
   const credential = await issue({
-    claims: {over_21: true}, expiresInSeconds: -3600
+    claims: {age_over_21: true}, expiresInSeconds: -3600
   });
   return {credential, agentDid: AGENT_DID};
 }
@@ -110,10 +110,10 @@ export async function buildExpired() {
  */
 export async function buildTampered() {
   const credential = await issue({
-    claims: {over_21: true}, expiresInSeconds: 3600
+    claims: {age_over_21: true}, expiresInSeconds: 3600
   });
   const tampered = JSON.parse(JSON.stringify(credential));
-  tampered.credentialSubject.over_21 = false;
+  tampered.credentialSubject.age_over_21 = false;
   return {credential: tampered, agentDid: AGENT_DID};
 }
 
@@ -125,7 +125,7 @@ export async function buildTampered() {
 export async function buildWrongAgent() {
   const realAgent = 'did:key:z6MkRealAgentXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXa';
   const credential = await issue({
-    claims: {over_21: true}, expiresInSeconds: 3600, subjectDid: realAgent
+    claims: {age_over_21: true}, expiresInSeconds: 3600, subjectDid: realAgent
   });
   return {credential, agentDid: AGENT_DID};
 }
@@ -137,9 +137,9 @@ export async function buildWrongAgent() {
  */
 export async function buildMissingClaim() {
   const credential = await issue({
-    claims: {age_verified: true}, expiresInSeconds: 3600
+    claims: {age_over_18: true}, expiresInSeconds: 3600
   });
-  return {credential, agentDid: AGENT_DID, requiredClaims: {over_21: true}};
+  return {credential, agentDid: AGENT_DID, requiredClaims: {age_over_21: true}};
 }
 
 /**
@@ -149,9 +149,9 @@ export async function buildMissingClaim() {
  */
 export async function buildWrongClaimValue() {
   const credential = await issue({
-    claims: {over_21: false}, expiresInSeconds: 3600
+    claims: {age_over_21: false}, expiresInSeconds: 3600
   });
-  return {credential, agentDid: AGENT_DID, requiredClaims: {over_21: true}};
+  return {credential, agentDid: AGENT_DID, requiredClaims: {age_over_21: true}};
 }
 
 /**
@@ -220,7 +220,7 @@ async function buildAuthn(options = {}) {
     agentKp.privateKey, makeDidKeyDriver()
   );
   const credential = await issue({
-    claims: {over_21: true}, expiresInSeconds: 3600, subjectDid: agentDid
+    claims: {age_over_21: true}, expiresInSeconds: 3600, subjectDid: agentDid
   });
 
   const token = options.expiredChallenge ?
@@ -348,7 +348,7 @@ export async function buildMembershipTierFail() {
  */
 export async function buildNotYetValid() {
   const credential = await issue({
-    claims: {over_21: true}, validFromInSeconds: 3600
+    claims: {age_over_21: true}, validFromInSeconds: 3600
   });
   return {credential, agentDid: AGENT_DID};
 }

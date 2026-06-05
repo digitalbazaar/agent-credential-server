@@ -23,8 +23,8 @@ const VC2_CONTEXT_URL = 'https://www.w3.org/ns/credentials/v2';
  * permitted via the index signature.
  *
  * @typedef {{
- *   age_verified?: boolean,
- *   over_21?: boolean,
+ *   age_over_18?: boolean,
+ *   age_over_21?: boolean,
  *   [key: string]: unknown
  * }} VCClaims
  */

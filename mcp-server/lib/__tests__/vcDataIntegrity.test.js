@@ -62,7 +62,7 @@ describe('issueCredentialDI', () => {
     const signed = await issueCredentialDI({
       issuerDid: did,
       subjectDid: AGENT_DID,
-      claims: {over_21: true},
+      claims: {age_over_21: true},
       signer,
       documentLoader
     });
@@ -92,7 +92,7 @@ describe('verifyCredentialDI', () => {
     const signed = await issueCredentialDI({
       issuerDid: did,
       subjectDid: AGENT_DID,
-      claims: {age_verified: true, over_21: true},
+      claims: {age_over_21: true},
       signer,
       documentLoader
     });
@@ -102,7 +102,7 @@ describe('verifyCredentialDI', () => {
     expect(result.valid).toBe(true);
     expect(result.issuer).toBe(did);
     expect(result.subject).toBe(AGENT_DID);
-    expect(result.claims).toMatchObject({age_verified: true, over_21: true});
+    expect(result.claims).toMatchObject({age_over_21: true});
   });
 
   it('rejects a tampered credentialSubject', async () => {
@@ -110,12 +110,12 @@ describe('verifyCredentialDI', () => {
     const signed = await issueCredentialDI({
       issuerDid: did,
       subjectDid: AGENT_DID,
-      claims: {over_21: true},
+      claims: {age_over_21: true},
       signer,
       documentLoader
     });
     const tampered = JSON.parse(JSON.stringify(signed));
-    tampered.credentialSubject.over_21 = false;
+    tampered.credentialSubject.age_over_21 = false;
     const result = await verifyCredentialDI({
       credential: tampered, documentLoader
     });
@@ -129,7 +129,7 @@ describe('verifyCredentialDI', () => {
     const signed = await issueCredentialDI({
       issuerDid: did,
       subjectDid: AGENT_DID,
-      claims: {over_21: true},
+      claims: {age_over_21: true},
       expiresInSeconds: -3600,
       signer,
       documentLoader
@@ -147,7 +147,7 @@ describe('verifyCredentialDI', () => {
     const signed = await issueCredentialDI({
       issuerDid: did,
       subjectDid: AGENT_DID,
-      claims: {over_21: true},
+      claims: {age_over_21: true},
       validFromInSeconds: 3600,
       signer,
       documentLoader
@@ -167,7 +167,7 @@ describe('verifyCredentialDI', () => {
     const forged = await issueCredentialDI({
       issuerDid: issuer.did,
       subjectDid: AGENT_DID,
-      claims: {over_21: true},
+      claims: {age_over_21: true},
       signer: impostor.signer,
       documentLoader: issuer.documentLoader
     });
