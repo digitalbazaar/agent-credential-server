@@ -8,6 +8,7 @@
  * offline (did:key).
  */
 import {deriveDisclosureTool} from '../tools/deriveDisclosure.js';
+import {generateBlsMultikey} from '../core/bls.js';
 import {generateEcdsaMultikey} from '../core/ecdsa.js';
 import {issueSdCredentialTool} from '../tools/issueSd.js';
 import {verifyDisclosureTool} from '../tools/verifyDisclosure.js';
@@ -101,4 +102,64 @@ describe('verifyDisclosureTool', () => {
     expect(result.valid).toBe(false);
     expect(result.reason).toEqual(expect.any(String));
   });
+});
+
+// --- bbs-2023 via the cryptosuite option (Phase 2.5) ---
+
+/**
+ * Issue a base SD credential under bbs-2023 from a fresh BLS issuer key.
+ *
+ * @returns {Promise<Record<string, unknown>>} The signed base credential.
+ */
+async function issueBlsBase() {
+  const key = await generateBlsMultikey();
+  const exported = /** @type {{
+   *   publicKeyMultibase: string, secretKeyMultibase: string
+   * }} */ (await key.export({publicKey: true, secretKey: true}));
+  return issueSdCredentialTool({
+    subjectDid: AGENT_DID,
+    claims: {birthdate: '2000-01-01', age_over_18: true, age_over_21: true},
+    publicKeyMultibase: exported.publicKeyMultibase,
+    privateKeyMultibase: exported.secretKeyMultibase,
+    expiresInSeconds: 3600,
+    cryptosuite: 'bbs-2023'
+  });
+}
+
+describe('SD tools with cryptosuite: bbs-2023', () => {
+  it('issues, derives, and verifies end-to-end', async () => {
+    const base = await issueBlsBase();
+    const proof = /** @type {{cryptosuite: string}} */ (base.proof);
+    expect(proof.cryptosuite).toBe('bbs-2023');
+
+    const revealed = await deriveDisclosureTool({
+      credential: base, revealClaims: ['age_over_21'], cryptosuite: 'bbs-2023'
+    });
+    const subject = /** @type {Record<string, unknown>} */ (
+      revealed.credentialSubject
+    );
+    expect(subject.age_over_21).toBe(true);
+    expect(subject.birthdate).toBeUndefined();
+
+    const result = await verifyDisclosureTool({
+      revealDocument: revealed, cryptosuite: 'bbs-2023'
+    });
+    expect(result.valid).toBe(true);
+    const claims = result.revealedClaims ?? {};
+    expect(claims.age_over_21).toBe(true);
+  });
+
+  it('produces unlinkable derivations through the tool layer (R-L3-7)',
+    async () => {
+      const base = await issueBlsBase();
+      const a = await deriveDisclosureTool({
+        credential: base, revealClaims: ['age_over_21'], cryptosuite: 'bbs-2023'
+      });
+      const b = await deriveDisclosureTool({
+        credential: base, revealClaims: ['age_over_21'], cryptosuite: 'bbs-2023'
+      });
+      const proofA = /** @type {{proofValue: string}} */ (a.proof);
+      const proofB = /** @type {{proofValue: string}} */ (b.proof);
+      expect(proofA.proofValue).not.toEqual(proofB.proofValue);
+    });
 });

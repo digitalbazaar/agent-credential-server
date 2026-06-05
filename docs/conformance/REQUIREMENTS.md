@@ -93,11 +93,22 @@ Demo (Phase 2, the selective-disclosure demo):
 | **R-L3-4** | SHOULD | Document that `ecdsa-sd-2023` presentations are linkable (unlinkability → bbs-2023). | `docs/phase-2-spec.md` §2/§6, `README.md` | n/a (documentation) |
 | **R-L3-5** | MUST | The birthdate and other hidden fields never enter agent-side code, output, or tool-call arguments (the wallet seam). | `demo-agent/lib/wallet.js` (closure-held credential), `demo-agent/lib/sdTools.js` | `wallet.test.js`, `sdEval.test.js` (leakage canary) |
 
-## Deliberately out of scope (later than Phase 2)
+## L3 — Unlinkable selective disclosure (Phase 2.5, `bbs-2023`)
+
+The same flow as ecdsa-sd-2023 with a BLS12-381 key, selected by the
+`cryptosuite` option. Its distinguishing property is **unlinkability**: two
+derivations from one credential cannot be correlated. See
+`docs/phase-2.5-spec.md`.
+
+| ID | Kw | Requirement | Enforced in | Proven by |
+|----|----|-------------|-------------|-----------|
+| **R-L3-7** | MUST | A holder can derive an unlinkable presentation: two derivations from the same credential are not correlatable. | `lib/core/vcSd.js` (`bbs-2023` path), `lib/core/bls.js` | `vcSd.test.js`, `sdTools.test.js`, `sdEval.test.js` (R-L3-7) |
+| **R-L3-9** | MUST | A bbs-2023 derived presentation verifies only if the revealed claims were in the issuer's original signature. | `lib/core/vcSd.js` (`verifyDisclosure`, bbs-2023) | `vcSd.test.js` (tampered bbs-2023), `sdTools.test.js` |
+
+## Deliberately out of scope
 
 | ID | Requirement | Why deferred |
 |----|-------------|--------------|
-| R-L3-7 | Unlinkable presentations (a verifier cannot correlate two derivations). | Needs `bbs-2023` (BLS12-381 keys). Phase 2.5. |
 | R-L3-8 | Credential-to-token bridging + audit trails. | L3 service-side concern. |
 
 ---

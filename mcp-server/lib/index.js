@@ -180,25 +180,32 @@ server.registerTool(
   }
 );
 
+const sdCryptosuite = z.enum(['ecdsa-sd-2023', 'bbs-2023']).optional()
+  .describe(
+    'SD cryptosuite (default ecdsa-sd-2023; bbs-2023 = unlinkable, BLS key)'
+  );
+
 server.registerTool(
   'issue_sd_credential',
   {
     description:
-      'Issue a VC 2.0 selective-disclosure credential (ecdsa-sd-2023, ' +
-      'P-256). The issuer did:key is derived from the signing key. Claims ' +
-      'should include precomputed age_over_NN flags.',
+      'Issue a VC 2.0 selective-disclosure credential. Default ecdsa-sd-2023 ' +
+      '(P-256); bbs-2023 (BLS) gives unlinkable presentations. The issuer ' +
+      'did:key is derived from the signing key. Claims should include ' +
+      'precomputed age_over_NN flags.',
     inputSchema: {
       subjectDid: z.string(),
       claims: z.record(z.string(), z.unknown())
         .describe('Claims to embed, including age_over_NN flags'),
       publicKeyMultibase: z.string()
-        .describe('Issuer P-256 public-key multibase'),
+        .describe('Issuer public-key multibase (matches the cryptosuite)'),
       privateKeyMultibase: z.string()
-        .describe('Issuer P-256 secret-key multibase; issuer DID is derived'),
+        .describe('Issuer secret-key multibase; issuer DID is derived'),
       mandatoryPointers: z.array(z.string()).optional()
         .describe('JSON pointers always revealed (default: issuer + validity)'),
       expiresInSeconds: z.number().optional()
-        .describe('Optional TTL in seconds')
+        .describe('Optional TTL in seconds'),
+      cryptosuite: sdCryptosuite
     }
   },
   async input => {
@@ -217,9 +224,10 @@ server.registerTool(
       'the requested claims. At most two age_over_NN flags per request.',
     inputSchema: {
       credential: z.record(z.string(), z.unknown())
-        .describe('The base SD credential (with an ecdsa-sd-2023 proof)'),
+        .describe('The base SD credential (with a selective-disclosure proof)'),
       revealClaims: z.array(z.string())
-        .describe('credentialSubject claim names to disclose')
+        .describe('credentialSubject claim names to disclose'),
+      cryptosuite: sdCryptosuite
     }
   },
   async input => {
@@ -235,11 +243,12 @@ server.registerTool(
   'verify_disclosure',
   {
     description:
-      'Verify a reveal document\'s derived ecdsa-sd-2023 proof and return ' +
-      'the revealed claims',
+      'Verify a reveal document\'s derived selective-disclosure proof and ' +
+      'return the revealed claims',
     inputSchema: {
       revealDocument: z.record(z.string(), z.unknown())
-        .describe('The reveal document to verify')
+        .describe('The reveal document to verify'),
+      cryptosuite: sdCryptosuite
     }
   },
   async input => {

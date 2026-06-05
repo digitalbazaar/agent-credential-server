@@ -2,12 +2,13 @@
  * Copyright (c) 2026 Digital Bazaar, Inc.
  */
 import {
-  deriveEcdsaDidKeyIssuer, makeEcdsaDidKeyDriver, makeEcdsaDocumentLoader
+  deriveSdDidKeyIssuer, makeSdDidKeyDriver, makeSdDocumentLoader
 } from './sdContext.js';
 import {issueSdCredential} from '../core/vcSd.js';
 
 /**
  * @typedef {import('../core/vc.js').VCClaims} VCClaims
+ * @typedef {import('../core/vcSd.js').SdCryptosuite} SdCryptosuite
  */
 
 /**
@@ -33,29 +34,33 @@ const DEFAULT_MANDATORY_POINTERS = ['/issuer', '/validFrom', '/validUntil'];
  * @property {number} [expiresInSeconds] Optional TTL in seconds.
  * @property {number} [validFromInSeconds] Optional seconds from now until
  *   valid; defaults to -1 (valid as of issuance).
+ * @property {SdCryptosuite} [cryptosuite] Optional SD cryptosuite; defaults to
+ *   ecdsa-sd-2023. Use 'bbs-2023' for unlinkable disclosure (a BLS key).
  */
 
 /**
- * Issue a VC 2.0 credential with an ecdsa-sd-2023 base proof. The issuer
- * did:key is derived from the signing key.
+ * Issue a VC 2.0 selective-disclosure base credential. The issuer did:key is
+ * derived from the signing key (P-256 for ecdsa-sd-2023, BLS for bbs-2023).
  *
  * @param {IssueSdInput} input - Subject, claims, signing key, and options.
  * @returns {Promise<Record<string, unknown>>} The signed base credential.
  */
 export async function issueSdCredentialTool(input) {
-  const driver = makeEcdsaDidKeyDriver();
-  const {did, signer} = await deriveEcdsaDidKeyIssuer({
+  const {cryptosuite} = input;
+  const driver = makeSdDidKeyDriver(cryptosuite);
+  const {did, signer} = await deriveSdDidKeyIssuer({
     publicKeyMultibase: input.publicKeyMultibase,
     secretKeyMultibase: input.privateKeyMultibase
-  }, driver);
+  }, driver, cryptosuite);
   return issueSdCredential({
     issuerDid: did,
     subjectDid: input.subjectDid,
     claims: input.claims,
     mandatoryPointers: input.mandatoryPointers ?? DEFAULT_MANDATORY_POINTERS,
     signer,
-    documentLoader: makeEcdsaDocumentLoader(driver),
+    documentLoader: makeSdDocumentLoader(driver),
     expiresInSeconds: input.expiresInSeconds,
-    validFromInSeconds: input.validFromInSeconds ?? -1
+    validFromInSeconds: input.validFromInSeconds ?? -1,
+    cryptosuite
   });
 }

@@ -1,8 +1,12 @@
 /*!
  * Copyright (c) 2026 Digital Bazaar, Inc.
  */
+import {makeSdDidKeyDriver, makeSdDocumentLoader} from './sdContext.js';
 import {deriveDisclosure} from '../core/vcSd.js';
-import {makeEcdsaDocumentLoader} from './sdContext.js';
+
+/**
+ * @typedef {import('../core/vcSd.js').SdCryptosuite} SdCryptosuite
+ */
 
 /**
  * ISO/IEC 18013-5 caps a reader at requesting at most this many age_over_NN
@@ -15,6 +19,8 @@ const MAX_AGE_OVER_FLAGS = 2;
  * @property {Record<string, unknown>} credential The base SD credential.
  * @property {string[]} revealClaims The credentialSubject claim names to
  *   disclose, e.g. ['age_over_21'].
+ * @property {SdCryptosuite} [cryptosuite] The SD cryptosuite the base proof
+ *   was signed with; defaults to ecdsa-sd-2023.
  */
 
 /**
@@ -26,7 +32,7 @@ const MAX_AGE_OVER_FLAGS = 2;
  * @returns {Promise<Record<string, unknown>>} The reveal document.
  */
 export async function deriveDisclosureTool(input) {
-  const {credential, revealClaims} = input;
+  const {credential, revealClaims, cryptosuite} = input;
 
   // KYA-OS R-L3-6: reject a request for more than two age_over_NN flags
   const ageFlags = revealClaims.filter(c => /^age_over_\d+$/.test(c));
@@ -40,6 +46,7 @@ export async function deriveDisclosureTool(input) {
   return deriveDisclosure({
     credential,
     selectivePointers,
-    documentLoader: makeEcdsaDocumentLoader()
+    documentLoader: makeSdDocumentLoader(makeSdDidKeyDriver(cryptosuite)),
+    cryptosuite
   });
 }
