@@ -3,27 +3,72 @@
  */
 /**
  * Pure selective-disclosure logic: issue a base proof, derive a reveal
- * document, and verify it, using the ecdsa-sd-2023 three-cryptosuite split via
- * @digitalbazaar/vc. No IO of its own — the signer and document loader are
- * passed in. The ECDSA analog of vc.js; purely additive (Phase 2).
+ * document, and verify it, using the three-cryptosuite split (sign / disclose
+ * / verify) via @digitalbazaar/vc. No IO of its own — the signer and document
+ * loader are passed in. Purely additive to the eddsa-rdfc-2022 path.
+ *
+ * Two cryptosuites share this flow, selected by the `cryptosuite` option:
+ *   - 'ecdsa-sd-2023' (default, Phase 2): P-256 keys; presentations are
+ *     LINKABLE.
+ *   - 'bbs-2023' (Phase 2.5): BLS12-381 keys; presentations are UNLINKABLE
+ *     (two derivations from one credential cannot be correlated).
+ * The flow is identical; only the factory trio and the key type differ.
  *
  * KYA-OS R-L3-1: a holder derives a presentation revealing a subset of claims.
  * R-L3-2: a derived presentation verifies only if the revealed claims were in
- * the issuer's original signature.
+ * the issuer's original signature. R-L3-7: bbs-2023 presentations are
+ * unlinkable.
  */
+import * as bbs2023 from '@digitalbazaar/bbs-2023-cryptosuite';
+import * as ecdsaSd2023 from '@digitalbazaar/ecdsa-sd-2023-cryptosuite';
 import * as vcjs from '@digitalbazaar/vc';
-import {
-  createDiscloseCryptosuite, createSignCryptosuite, createVerifyCryptosuite
-} from '@digitalbazaar/ecdsa-sd-2023-cryptosuite';
 import {AGENT_CREDENTIAL_CONTEXT_URL} from './documentLoader.js';
 import {DataIntegrityProof} from '@digitalbazaar/data-integrity';
 
 /**
  * @typedef {import("./documentLoader.js").DocumentLoader} DocumentLoader
  * @typedef {import("./vc.js").VCClaims} VCClaims
+ * @typedef {'ecdsa-sd-2023' | 'bbs-2023'} SdCryptosuite
  */
 
 const VC2_CONTEXT_URL = 'https://www.w3.org/ns/credentials/v2';
+
+const DEFAULT_CRYPTOSUITE = 'ecdsa-sd-2023';
+
+/**
+ * @typedef {object} SdCryptosuiteFactories
+ * @property {(options: {mandatoryPointers: string[]}) => unknown}
+ *   createSignCryptosuite
+ * @property {(options: {selectivePointers: string[]}) => unknown}
+ *   createDiscloseCryptosuite
+ * @property {() => unknown} createVerifyCryptosuite
+ */
+
+// The sign/disclose/verify factory trio for each supported SD cryptosuite.
+// The discriminator stays in this one pure place; the tool layer only passes
+// a string.
+/** @type {Record<string, SdCryptosuiteFactories>} */
+const CRYPTOSUITES = {
+  'ecdsa-sd-2023': ecdsaSd2023,
+  'bbs-2023': bbs2023
+};
+
+/**
+ * Resolve the cryptosuite factory trio for a kind, defaulting to ecdsa-sd-2023
+ * (the conservative, mature suite).
+ *
+ * @param {SdCryptosuite} [kind] - The cryptosuite kind.
+ * @returns {SdCryptosuiteFactories} The sign/disclose/verify factories.
+ */
+function resolveCryptosuite(kind = DEFAULT_CRYPTOSUITE) {
+  const suite = CRYPTOSUITES[kind];
+  if(!suite) {
+    throw new Error(
+      `Unknown cryptosuite "${kind}". Supported: ` +
+      `${Object.keys(CRYPTOSUITES).join(', ')}.`);
+  }
+  return suite;
+}
 
 /**
  * @typedef {object} IssueSdInput
@@ -38,20 +83,23 @@ const VC2_CONTEXT_URL = 'https://www.w3.org/ns/credentials/v2';
  *   and contexts.
  * @property {number} [expiresInSeconds] - Lifetime in seconds; omit for none.
  * @property {number} [validFromInSeconds] - Seconds from now until valid.
+ * @property {SdCryptosuite} [cryptosuite] - The SD cryptosuite; defaults to
+ *   ecdsa-sd-2023.
  */
 
 /**
- * Issue a VC 2.0 credential with an ecdsa-sd-2023 base (SD) proof.
+ * Issue a VC 2.0 credential with a selective-disclosure base proof.
  *
  * @param {IssueSdInput} input - Issuer, subject, claims, mandatory pointers,
- *   signer, and loader.
+ *   signer, loader, and optional cryptosuite.
  * @returns {Promise<Record<string, unknown>>} The signed base credential.
  */
 export async function issueSdCredential(input) {
   const {
     issuerDid, subjectDid, claims, mandatoryPointers, signer, documentLoader,
-    expiresInSeconds, validFromInSeconds
+    expiresInSeconds, validFromInSeconds, cryptosuite
   } = input;
+  const {createSignCryptosuite} = resolveCryptosuite(cryptosuite);
 
   const credential = {
     '@context': [VC2_CONTEXT_URL, AGENT_CREDENTIAL_CONTEXT_URL],
@@ -78,6 +126,8 @@ export async function issueSdCredential(input) {
  * @property {string[]} selectivePointers - JSON pointers to the claims to
  *   disclose (e.g. '/credentialSubject/age_over_21').
  * @property {DocumentLoader} documentLoader - The document loader.
+ * @property {SdCryptosuite} [cryptosuite] - The SD cryptosuite; defaults to
+ *   ecdsa-sd-2023. Must match the suite the base proof was signed with.
  */
 
 /**
@@ -85,11 +135,13 @@ export async function issueSdCredential(input) {
  * issuer's mandatory claims). The undisclosed claims are absent from the
  * output, not merely hidden.
  *
- * @param {DeriveInput} input - Base credential, selective pointers, loader.
+ * @param {DeriveInput} input - Base credential, selective pointers, loader,
+ *   and optional cryptosuite.
  * @returns {Promise<Record<string, unknown>>} The reveal document.
  */
 export async function deriveDisclosure(input) {
-  const {credential, selectivePointers, documentLoader} = input;
+  const {credential, selectivePointers, documentLoader, cryptosuite} = input;
+  const {createDiscloseCryptosuite} = resolveCryptosuite(cryptosuite);
   const suite = new DataIntegrityProof({
     cryptosuite: createDiscloseCryptosuite({selectivePointers})
   });
@@ -102,6 +154,8 @@ export async function deriveDisclosure(input) {
  * @typedef {object} VerifyDisclosureInput
  * @property {Record<string, unknown>} revealDocument - The reveal document.
  * @property {DocumentLoader} documentLoader - The document loader.
+ * @property {SdCryptosuite} [cryptosuite] - The SD cryptosuite; defaults to
+ *   ecdsa-sd-2023. Must match the suite the reveal document was derived with.
  */
 
 /**
@@ -120,7 +174,8 @@ export async function deriveDisclosure(input) {
  * @returns {Promise<VerifyDisclosureResult>} The verification result.
  */
 export async function verifyDisclosure(input) {
-  const {revealDocument, documentLoader} = input;
+  const {revealDocument, documentLoader, cryptosuite} = input;
+  const {createVerifyCryptosuite} = resolveCryptosuite(cryptosuite);
   const suite = new DataIntegrityProof({
     cryptosuite: createVerifyCryptosuite()
   });

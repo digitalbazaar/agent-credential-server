@@ -6,7 +6,9 @@
  * reveal document, verify it. The did:key driver + document loader are built
  * here (offline P-256 did:key) and injected, so these run without network.
  */
+import * as Bls12381Multikey from '@digitalbazaar/bls12-381-multikey';
 import * as EcdsaMultikey from '@digitalbazaar/ecdsa-multikey';
+import {BLS_MULTIKEY_HEADER, generateBlsMultikey} from '../core/bls.js';
 import {
   deriveDisclosure, issueSdCredential, verifyDisclosure
 } from '../core/vcSd.js';
@@ -152,4 +154,144 @@ describe('verifyDisclosure', () => {
       expect(result.valid).toBe(false);
       expect(result.reason).toEqual(expect.any(String));
     });
+});
+
+// --- bbs-2023: unlinkable disclosure (Phase 2.5) ---
+
+/**
+ * Build a BLS12-381 did:key issuer + the project's offline document loader.
+ *
+ * @returns {Promise<{
+ *   did: string, signer: object, documentLoader: DocumentLoader
+ * }>} The issuer DID, its BBS signer, and a did:key-aware loader.
+ */
+async function makeBlsIssuer() {
+  const driver = didKeyDriverFactory();
+  driver.use({
+    multibaseMultikeyHeader: BLS_MULTIKEY_HEADER,
+    fromMultibase: Bls12381Multikey.from
+  });
+  const keyPair = await generateBlsMultikey();
+  const {didDocument, methodFor} = await driver.fromKeyPair({
+    verificationKeyPair: keyPair
+  });
+  const vm = methodFor({purpose: 'assertionMethod'});
+  keyPair.id = vm.id;
+  keyPair.controller = didDocument.id;
+  const documentLoader = createDocumentLoader({
+    didKeyDriver: driver,
+    fallbackLoader: defaultDocumentLoader
+  });
+  return {did: didDocument.id, signer: keyPair.signer(), documentLoader};
+}
+
+/**
+ * Issue a base SD credential under the bbs-2023 cryptosuite.
+ *
+ * @param {{did: string, signer: object, documentLoader: DocumentLoader}} ctx
+ *   The BLS issuer context.
+ * @returns {Promise<Record<string, unknown>>} The signed base credential.
+ */
+async function issueBlsBase(ctx) {
+  return issueSdCredential({
+    issuerDid: ctx.did,
+    subjectDid: AGENT_DID,
+    claims: {birthdate: '2000-01-01', age_over_18: true, age_over_21: true},
+    mandatoryPointers: MANDATORY,
+    signer: ctx.signer,
+    documentLoader: ctx.documentLoader,
+    validFromInSeconds: -1,
+    expiresInSeconds: 3600,
+    cryptosuite: 'bbs-2023'
+  });
+}
+
+describe('bbs-2023 selective disclosure', () => {
+  it('issues a base proof with the bbs-2023 cryptosuite', async () => {
+    const ctx = await makeBlsIssuer();
+    const base = await issueBlsBase(ctx);
+    const proof = /** @type {{cryptosuite: string}} */ (base.proof);
+    expect(proof.cryptosuite).toBe('bbs-2023');
+  });
+
+  it('derives a reveal document disclosing only age_over_21', async () => {
+    const ctx = await makeBlsIssuer();
+    const base = await issueBlsBase(ctx);
+    const revealed = await deriveDisclosure({
+      credential: base,
+      selectivePointers: ['/credentialSubject/age_over_21'],
+      documentLoader: ctx.documentLoader,
+      cryptosuite: 'bbs-2023'
+    });
+    const subject = /** @type {Record<string, unknown>} */ (
+      revealed.credentialSubject
+    );
+    expect(subject.age_over_21).toBe(true);
+    expect(subject.birthdate).toBeUndefined();
+    expect(subject.age_over_18).toBeUndefined();
+  });
+
+  it('verifies a genuine bbs-2023 reveal document', async () => {
+    const ctx = await makeBlsIssuer();
+    const base = await issueBlsBase(ctx);
+    const revealed = await deriveDisclosure({
+      credential: base,
+      selectivePointers: ['/credentialSubject/age_over_21'],
+      documentLoader: ctx.documentLoader,
+      cryptosuite: 'bbs-2023'
+    });
+    const result = await verifyDisclosure({
+      revealDocument: revealed,
+      documentLoader: ctx.documentLoader,
+      cryptosuite: 'bbs-2023'
+    });
+    expect(result.valid).toBe(true);
+    expect(result.revealedClaims?.age_over_21).toBe(true);
+  });
+
+  it('produces unlinkable derivations: two reveals differ yet both verify ' +
+    '(R-L3-7)', async () => {
+    const ctx = await makeBlsIssuer();
+    const base = await issueBlsBase(ctx);
+    const opts = {
+      credential: base,
+      selectivePointers: ['/credentialSubject/age_over_21'],
+      documentLoader: ctx.documentLoader,
+      cryptosuite: /** @type {'bbs-2023'} */ ('bbs-2023')
+    };
+    const a = await deriveDisclosure(opts);
+    const b = await deriveDisclosure(opts);
+    const proofA = /** @type {{proofValue: string}} */ (a.proof);
+    const proofB = /** @type {{proofValue: string}} */ (b.proof);
+    // unlinkable: the two derived proofs are not correlatable
+    expect(proofA.proofValue).not.toEqual(proofB.proofValue);
+    // ...yet both verify independently
+    for(const reveal of [a, b]) {
+      const result = await verifyDisclosure({
+        revealDocument: reveal,
+        documentLoader: ctx.documentLoader,
+        cryptosuite: 'bbs-2023'
+      });
+      expect(result.valid).toBe(true);
+    }
+  });
+
+  it('rejects a tampered bbs-2023 reveal document', async () => {
+    const ctx = await makeBlsIssuer();
+    const base = await issueBlsBase(ctx);
+    const revealed = await deriveDisclosure({
+      credential: base,
+      selectivePointers: ['/credentialSubject/age_over_21'],
+      documentLoader: ctx.documentLoader,
+      cryptosuite: 'bbs-2023'
+    });
+    const tampered = JSON.parse(JSON.stringify(revealed));
+    tampered.credentialSubject.age_over_21 = false;
+    const result = await verifyDisclosure({
+      revealDocument: tampered,
+      documentLoader: ctx.documentLoader,
+      cryptosuite: 'bbs-2023'
+    });
+    expect(result.valid).toBe(false);
+  });
 });
