@@ -69,3 +69,55 @@ describe('getModel key preflight', () => {
     expect(() => getModel('mystery')).toThrow(/Unknown/);
   });
 });
+
+describe('getModel openai-compatible', () => {
+  const saved = {
+    key: process.env.OPENAI_COMPATIBLE_API_KEY,
+    base: process.env.OPENAI_COMPATIBLE_BASE_URL,
+    model: process.env.OPENAI_COMPATIBLE_MODEL
+  };
+  /**
+   * Restore one env var to its saved value (deleting if it was unset).
+   *
+   * @param {string} key - The env var name.
+   * @param {string | undefined} value - The saved value.
+   * @returns {void}
+   */
+  function restore(key, value) {
+    if(value === undefined) {
+      delete process.env[key];
+    } else {
+      process.env[key] = value;
+    }
+  }
+  afterEach(() => {
+    restore('OPENAI_COMPATIBLE_API_KEY', saved.key);
+    restore('OPENAI_COMPATIBLE_BASE_URL', saved.base);
+    restore('OPENAI_COMPATIBLE_MODEL', saved.model);
+  });
+
+  it('throws a clear error when the API key is missing', () => {
+    delete process.env.OPENAI_COMPATIBLE_API_KEY;
+    process.env.OPENAI_COMPATIBLE_BASE_URL = 'https://api.deepseek.com/v1';
+    process.env.OPENAI_COMPATIBLE_MODEL = 'deepseek-chat';
+    expect(() => getModel('openai-compatible'))
+      .toThrow(/OPENAI_COMPATIBLE_API_KEY/);
+  });
+
+  it('throws when the base URL or model is missing', () => {
+    process.env.OPENAI_COMPATIBLE_API_KEY = 'sk-test';
+    delete process.env.OPENAI_COMPATIBLE_BASE_URL;
+    delete process.env.OPENAI_COMPATIBLE_MODEL;
+    expect(() => getModel('openai-compatible'))
+      .toThrow(/OPENAI_COMPATIBLE_BASE_URL/);
+  });
+
+  it('builds a model when key, base URL, and model are set', () => {
+    process.env.OPENAI_COMPATIBLE_API_KEY = 'sk-test';
+    process.env.OPENAI_COMPATIBLE_BASE_URL = 'https://api.deepseek.com/v1';
+    process.env.OPENAI_COMPATIBLE_MODEL = 'deepseek-chat';
+    const {name, model} = getModel('openai-compatible');
+    expect(name).toBe('openai-compatible');
+    expect(model).toBeDefined();
+  });
+});

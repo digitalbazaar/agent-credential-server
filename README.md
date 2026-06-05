@@ -133,8 +133,9 @@ A human issues a short-lived age-verification credential to an agent:
 
 The demo agent is **model-agnostic** (built on the Vercel AI SDK) and never
 decides access itself: it calls the `check_delegation` tool and reports that
-tool's verdict. Pick a provider with `AGENT_PROVIDER` or `--provider` (default
-`anthropic`; `ollama` runs locally with no API key).
+tool's verdict. Pick a provider with `AGENT_PROVIDER` or `--provider`: default
+`anthropic`, `ollama` (local, no API key), or `openai-compatible` (DeepSeek,
+Kimi, OpenAI, HuggingFace TGI — see [Other models](#other-models-openai-compatible)).
 
 ```bash
 npm run start --workspace=demo-agent -- valid     # valid VC → granted
@@ -167,14 +168,36 @@ error mid-run).
 > rather than false-grants — but it makes the `ollama` demo non-deterministic.
 > A larger `OLLAMA_MODEL` improves reliability.
 
-### Adding another model provider
+### Other models (OpenAI-compatible)
+
+A built-in `openai-compatible` provider works with any OpenAI-style endpoint —
+**DeepSeek, Kimi (Moonshot), OpenAI, or a self-hosted HuggingFace TGI server**.
+These are popular lower-cost alternatives to the frontier hosted models. Point
+it with env vars and select it:
+
+```bash
+# in .env
+OPENAI_COMPATIBLE_BASE_URL=https://api.deepseek.com/v1
+OPENAI_COMPATIBLE_MODEL=deepseek-chat
+OPENAI_COMPATIBLE_API_KEY=...
+
+npm run start --workspace=demo-agent -- valid --provider=openai-compatible
+```
+
+> **Not all models are tested.** We verify the demo against Anthropic; the
+> `ollama` and `openai-compatible` paths are wired and unit-tested, but the
+> field of models behind them is large and tool-calling quality varies. If you
+> get a particular model (a DeepSeek/Kimi variant, a HuggingFace model, …)
+> working well — or find one that doesn't — **pull requests and notes are
+> welcome.** The authorization guarantee holds regardless of the model: a
+> skipped or malformed tool call denies rather than false-grants (R-X-1).
+
+### Adding a new named provider
 
 The agent speaks the Vercel AI SDK's unified tool-calling interface, so any
-AI-SDK provider drops in. To experiment with, say, a HuggingFace-hosted model
-or another OpenAI-compatible endpoint:
+AI-SDK provider drops in:
 
-1. Install the provider package (e.g. `@ai-sdk/openai-compatible`, or a
-   HuggingFace/community AI-SDK provider).
+1. Install the provider package (e.g. a HuggingFace/community AI-SDK provider).
 2. In `demo-agent/lib/providers.js`, add a `case` to `getModel` returning
    `{name, model}`, and add a row to `PROVIDER_KEY_ENV` naming the API-key env
    var the provider needs (or `null` if it needs none — like `ollama`). The
@@ -183,8 +206,7 @@ or another OpenAI-compatible endpoint:
    key in `.env`.
 
 Nothing else changes: the tools, the eval, and the authorization logic are
-provider-agnostic. A small local or hosted model may tool-call unreliably (see
-the provider note above) — the safety guarantee holds regardless.
+provider-agnostic.
 
 The agent's behaviour is guarded by a deterministic, offline **eval** (a golden
 dataset plus tool-deference and leakage canaries) that runs in CI on every push.

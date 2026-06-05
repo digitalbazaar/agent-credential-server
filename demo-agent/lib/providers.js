@@ -6,11 +6,13 @@
  * provider-agnostic (it speaks the Vercel AI SDK's unified tool-calling
  * interface); this module maps a provider name to a concrete model.
  *
- * Anthropic and Ollama are wired up now. OpenAI and Gemini drop in later with
+ * Anthropic, Ollama, and a generic OpenAI-compatible provider (DeepSeek,
+ * Kimi/Moonshot, OpenAI, HuggingFace TGI, …) are wired up. Others drop in with
  * the same shape via their AI SDK providers.
  */
 import {anthropic} from '@ai-sdk/anthropic';
 import {createOllama} from 'ollama-ai-provider-v2';
+import {createOpenAICompatible} from '@ai-sdk/openai-compatible';
 
 const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-4-6';
 const DEFAULT_OLLAMA_MODEL = 'qwen2.5';
@@ -37,7 +39,8 @@ export function resolveProviderName(explicit) {
  */
 const PROVIDER_KEY_ENV = {
   anthropic: 'ANTHROPIC_API_KEY',
-  ollama: null // local, no key
+  ollama: null, // local, no key
+  'openai-compatible': 'OPENAI_COMPATIBLE_API_KEY'
 };
 
 /**
@@ -76,6 +79,27 @@ export function getModel(explicit) {
       const ollama = createOllama();
       const id = process.env.OLLAMA_MODEL ?? DEFAULT_OLLAMA_MODEL;
       return {name, model: ollama(id)};
+    }
+    case 'openai-compatible': {
+      // any OpenAI-compatible endpoint (DeepSeek, Kimi/Moonshot, OpenAI,
+      // a HuggingFace TGI server, …) — point it with env vars. Lower-cost
+      // hosted models are a common reason to use this. Tool-calling quality
+      // varies by model; the authorization guarantee holds regardless (R-X-1).
+      const baseURL = process.env.OPENAI_COMPATIBLE_BASE_URL;
+      const id = process.env.OPENAI_COMPATIBLE_MODEL;
+      if(!baseURL || !id) {
+        throw new Error(
+          'Provider "openai-compatible" requires OPENAI_COMPATIBLE_BASE_URL ' +
+          'and OPENAI_COMPATIBLE_MODEL (plus OPENAI_COMPATIBLE_API_KEY). ' +
+          'See .env.example.'
+        );
+      }
+      const provider = createOpenAICompatible({
+        name: 'openai-compatible',
+        baseURL,
+        apiKey: process.env.OPENAI_COMPATIBLE_API_KEY
+      });
+      return {name, model: provider(id)};
     }
     default:
       throw new Error(
