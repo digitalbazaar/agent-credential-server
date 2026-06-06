@@ -10,17 +10,13 @@
  * human reviews the staged diff and signs it. The agent cannot cut over until
  * then. The full design is in docs/cloudflare-migration-spec.md.
  */
-import * as Ed25519Multikey from '@digitalbazaar/ed25519-multikey';
 import {buildRootCapability, createZcapDocumentLoader}
   from 'mcp-server/lib/core/zcapChain.js';
+import {delegateCapability, makeDelegationController}
+  from 'mcp-server/lib/core/zcapDelegate.js';
 import {generateKeyPair, toBase64url} from 'mcp-server/lib/core/crypto.js';
-import {CapabilityDelegation} from '@digitalbazaar/zcap';
-import {DataIntegrityProof} from '@digitalbazaar/data-integrity';
-import {driver as didKeyDriverFactory} from '@digitalbazaar/did-method-key';
-import {cryptosuite as eddsaRdfc2022}
-  from '@digitalbazaar/eddsa-rdfc-2022-cryptosuite';
 import {issueCredentialTool} from 'mcp-server/lib/tools/issue.js';
-import jsigs from 'jsonld-signatures';
+import {makeDidKeyDriver} from 'mcp-server/lib/tools/didKeyContext.js';
 
 const ZONE = 'sandbox.example';
 
@@ -33,64 +29,10 @@ export const CUTOVER_ACTION = 'cutover-nameservers';
 export const CUTOVER_TARGET = `https://cf.internal/zones/${ZONE}/nameservers`;
 
 /**
- * Build a did:key controller with a capabilityDelegation signer.
- *
- * @param {import('@digitalbazaar/did-method-key').DidKeyDriver} driver - The
- *   did:key driver.
- * @returns {Promise<{did: string, signer: object}>} The controller.
- */
-async function makeController(driver) {
-  const keyPair = await Ed25519Multikey.generate();
-  const {didDocument, methodFor} = await driver.fromKeyPair({
-    verificationKeyPair: keyPair
-  });
-  const vm = methodFor({purpose: 'capabilityDelegation'});
-  keyPair.id = vm.id;
-  keyPair.controller = didDocument.id;
-  return {did: didDocument.id, signer: keyPair.signer()};
-}
-
-/**
- * Sign a delegated capability from a parent to a controller, scoped to one
- * action and target.
- *
- * @param {object} input - Delegation parameters.
- * @param {{id: string}} input.parent - The parent capability.
- * @param {object} input.signer - The delegator's signer.
- * @param {string} input.toController - The recipient (agent) DID.
- * @param {string} input.action - The single allowed action.
- * @param {string} input.target - The invocation target.
- * @param {number} input.expiresInSeconds - Lifetime from now.
- * @param {(url: string) => Promise<unknown>} input.loader - The zcap document
- *   loader.
- * @returns {Promise<Record<string, unknown> & {id: string}>} The signed zcap.
- */
-async function delegate(input) {
-  const {
-    parent, signer, toController, action, target, expiresInSeconds, loader
-  } = input;
-  const zcap = {
-    '@context': ['https://w3id.org/zcap/v1'],
-    id: `urn:uuid:${crypto.randomUUID()}`,
-    parentCapability: parent.id,
-    invocationTarget: target,
-    controller: toController,
-    allowedAction: action,
-    expires: new Date(Date.now() + expiresInSeconds * 1000).toISOString()
-  };
-  const signed = await jsigs.sign(zcap, {
-    documentLoader: loader,
-    suite: new DataIntegrityProof({signer, cryptosuite: eddsaRdfc2022}),
-    purpose: new CapabilityDelegation({parentCapability: parent})
-  });
-  return /** @type {Record<string, unknown> & {id: string}} */ (signed);
-}
-
-/**
  * @typedef {import('mcp-server/lib/core/zcapChain.js').RootCapability}
  *   RootCapability
- * @typedef {Record<string, unknown> & {id: string,
- *   controller?: string, allowedAction?: string | string[]}} DelegatedZcap
+ * @typedef {import('mcp-server/lib/core/zcapDelegate.js').DelegatedZcap}
+ *   DelegatedZcap
  */
 
 /**
@@ -123,15 +65,11 @@ async function delegate(input) {
  */
 export async function buildMigrationScenario(options = {}) {
   const role = options.role ?? 'domain-admin';
-  const driver = didKeyDriverFactory();
-  driver.use({
-    multibaseMultikeyHeader: 'z6Mk',
-    fromMultibase: Ed25519Multikey.from
-  });
+  const driver = makeDidKeyDriver();
 
   // the org is the root authority and delegator; the agent is the recipient
-  const org = await makeController(driver);
-  const agent = await makeController(driver);
+  const org = await makeDelegationController(driver);
+  const agent = await makeDelegationController(driver);
 
   // root capabilities over the two protected resources (stage + cutover)
   const stageRoot = buildRootCapability({
@@ -154,7 +92,7 @@ export async function buildMigrationScenario(options = {}) {
   });
 
   // pre-issue the stage delegation (org -> agent), scoped to stage-records
-  const stageDelegation = await delegate({
+  const stageDelegation = await delegateCapability({
     parent: stageRoot,
     signer: org.signer,
     toController: agent.did,
@@ -174,7 +112,7 @@ export async function buildMigrationScenario(options = {}) {
     cutoverTarget: CUTOVER_TARGET,
     // Model A: the cutover capability is created only when the human approves.
     async approveCutover() {
-      return delegate({
+      return delegateCapability({
         parent: cutoverRoot,
         signer: org.signer,
         toController: agent.did,
