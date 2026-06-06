@@ -5,12 +5,12 @@
  * Tool-layer IO seam for the selective-disclosure paths: build a did:key
  * driver, a document loader that resolves did:key offline, and derive an
  * issuer from a keypair multibase. Cryptosuite-aware — ecdsa-sd-2023 uses
- * P-256 ECDSA keys (zDna), bbs-2023 uses BLS12-381 keys (zUC7) — so the same
- * seam serves both. Purely additive (Phase 2/2.5).
+ * P-256 ECDSA keys (zDna), bbs-2023 uses BLS12-381 keys (zUC6/zUC7) — so the
+ * same seam serves both. Purely additive (Phase 2/2.5).
  */
 import * as Bls12381Multikey from '@digitalbazaar/bls12-381-multikey';
 import * as EcdsaMultikey from '@digitalbazaar/ecdsa-multikey';
-import {BLS_MULTIKEY_HEADER, importBlsMultikey} from '../core/bls.js';
+import {BLS_MULTIKEY_HEADERS, importBlsMultikey} from '../core/bls.js';
 import {ECDSA_MULTIKEY_HEADER, importEcdsaMultikey} from '../core/ecdsa.js';
 import {createDocumentLoader} from '../core/documentLoader.js';
 import {defaultDocumentLoader} from '@digitalbazaar/vc';
@@ -21,18 +21,20 @@ import {driver as didKeyDriverFactory} from '@digitalbazaar/did-method-key';
  * @typedef {import('../core/vcSd.js').SdCryptosuite} SdCryptosuite
  */
 
-// Per-cryptosuite key wiring: the did:key multibase header, the multikey
+// Per-cryptosuite key wiring: the did:key multibase header(s), the multikey
 // module's `from` (for the driver), and the project's import helper (which
-// validates the header). One row per supported SD cryptosuite.
+// validates the header). `headers` is a list because BLS12-381 G2 keys have
+// two possible 4-char prefixes (zUC6/zUC7); each must be registered with the
+// driver. One row per supported SD cryptosuite.
 /** @type {Record<string, SdKeyWiring>} */
 const SD_KEYS = {
   'ecdsa-sd-2023': {
-    header: ECDSA_MULTIKEY_HEADER,
+    headers: [ECDSA_MULTIKEY_HEADER],
     fromMultibase: EcdsaMultikey.from,
     importMultikey: importEcdsaMultikey
   },
   'bbs-2023': {
-    header: BLS_MULTIKEY_HEADER,
+    headers: BLS_MULTIKEY_HEADERS,
     fromMultibase: Bls12381Multikey.from,
     importMultikey: importBlsMultikey
   }
@@ -40,7 +42,8 @@ const SD_KEYS = {
 
 /**
  * @typedef {object} SdKeyWiring
- * @property {string} header - The did:key multibase header.
+ * @property {readonly string[]} headers - The did:key multibase header(s) the
+ *   driver must register for this key type.
  * @property {(key: any) => Promise<any>} fromMultibase - The multikey module's
  *   `from`, for the did:key driver.
  * @property {(key: any) => Promise<any>} importMultikey - The project's
@@ -70,9 +73,13 @@ function resolveKeyWiring(cryptosuite = 'ecdsa-sd-2023') {
  * @returns {import('@digitalbazaar/did-method-key').DidKeyDriver} The driver.
  */
 export function makeSdDidKeyDriver(cryptosuite) {
-  const {header, fromMultibase} = resolveKeyWiring(cryptosuite);
+  const {headers, fromMultibase} = resolveKeyWiring(cryptosuite);
   const driver = didKeyDriverFactory();
-  driver.use({multibaseMultikeyHeader: header, fromMultibase});
+  // register every valid multibase header for this key type (BLS12-381 G2 has
+  // two, zUC6/zUC7, depending on the key bytes)
+  for(const multibaseMultikeyHeader of headers) {
+    driver.use({multibaseMultikeyHeader, fromMultibase});
+  }
   return driver;
 }
 

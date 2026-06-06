@@ -13,11 +13,18 @@
 import * as Bls12381Multikey from '@digitalbazaar/bls12-381-multikey';
 
 /**
- * The BLS12-381 G2 multibase (multikey) prefix. The did:key driver and the
- * document loader use this to recognize a BBS key, the way `z6Mk` flags
- * Ed25519 and `zDna` flags P-256 ECDSA.
+ * The BLS12-381 G2 multibase (multikey) prefixes. The did:key driver
+ * recognizes a key by its first 4 base58 characters, the way `z6Mk` flags
+ * Ed25519 and `zDna` flags P-256 ECDSA. BLS12-381 G2 is not a single fixed
+ * prefix. The multicodec header (0xeb01) is constant, but base58 of that
+ * header plus the 96-byte key lands the 4th character on either `6` or `7`
+ * depending on the key bytes, so a generated key is `zUC6...` or `zUC7...`.
+ * Both must be registered with the driver, or roughly half of generated keys
+ * fail to resolve.
+ *
+ * @type {readonly string[]}
  */
-export const BLS_MULTIKEY_HEADER = 'zUC7';
+export const BLS_MULTIKEY_HEADERS = Object.freeze(['zUC6', 'zUC7']);
 
 /**
  * The signature algorithm bbs-2023 requires (the SHA-256 BBS suite over
@@ -55,10 +62,11 @@ export async function generateBlsMultikey() {
  * @returns {Promise<BlsMultikeyPair>} The imported multikey.
  */
 export async function importBlsMultikey(input) {
-  if(!input?.publicKeyMultibase?.startsWith(BLS_MULTIKEY_HEADER)) {
+  const mb = input?.publicKeyMultibase;
+  if(!mb || !BLS_MULTIKEY_HEADERS.some(h => mb.startsWith(h))) {
     throw new Error(
-      `Not a BLS12-381 BBS multikey: expected a "${BLS_MULTIKEY_HEADER}" ` +
-      'publicKeyMultibase prefix.');
+      'Not a BLS12-381 BBS multikey: expected a publicKeyMultibase with one ' +
+      `of the prefixes ${BLS_MULTIKEY_HEADERS.join(', ')}.`);
   }
   return Bls12381Multikey.from(input);
 }
