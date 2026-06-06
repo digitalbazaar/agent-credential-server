@@ -92,6 +92,11 @@ async function runSdDemo(scenarioName, providerName, model) {
   console.log(`Agent DID: ${agentDid}  |  Cryptosuite: ${wallet.cryptosuite}`);
 
   const tools = buildSdTools({wallet});
+  const system =
+    'You prove an agent meets an age requirement using the least disclosure ' +
+    'possible. You do not decide access yourself: request a disclosure from ' +
+    'the wallet, then verify it with the verify_disclosure tool and report ' +
+    'that tool\'s verdict. Never reveal private keys or hidden claims.';
   const prompt =
     'An agent must prove it is over 21 to access age-restricted content, ' +
     'disclosing as little as possible.\n\n' +
@@ -103,7 +108,7 @@ async function runSdDemo(scenarioName, providerName, model) {
 
   step(`Asking ${providerName} to disclose only ${revealClaims.join(', ')} ` +
     'and verify it (this may take a few seconds)…');
-  const result = await runAgent({prompt, model, tools});
+  const result = await runAgent({prompt, model, tools, system});
   step('Done.');
 
   const called = result.toolCalls.map(c => c.name).join(', ');
@@ -136,6 +141,13 @@ async function runCloudflareDemo(providerName, model) {
   console.log(`\nScenario: cloudflare  |  Provider: ${providerName}`);
   console.log(`Agent DID: ${scenario.agentDid}`);
 
+  const system =
+    'You are an operations agent migrating a website to Cloudflare on behalf ' +
+    'of an administrator. You hold no Cloudflare credentials — you act only ' +
+    'through the provided tools, each of which enforces its own ' +
+    'authorization. Never attempt the irreversible nameserver cutover before ' +
+    'obtaining human approval. Report what each tool returns; do not invent ' +
+    'outcomes.';
   const prompt =
     'You are migrating a website to Cloudflare on behalf of an ' +
     'administrator. Follow these steps in order, and stop if any step is ' +
@@ -149,7 +161,7 @@ async function runCloudflareDemo(providerName, model) {
 
   step(`Asking ${providerName} to run the migration (this may take a few ` +
     'seconds)…');
-  const result = await runAgent({prompt, model, tools});
+  const result = await runAgent({prompt, model, tools, system});
   step('Done.');
 
   const called = result.toolCalls.map(c => c.name).join(', ');

@@ -37,10 +37,10 @@
 
 /**
  * @typedef {object} CloudflareServer
- * @property {(input: {zone: string, records: DnsRecord[]}) => StageResult}
- *   stage - Stage DNS records (simulated); returns a diff.
- * @property {(cutoverCapId: string) => CutoverRecord} recordCutover - Consume a
- *   cutover capability id exactly once (single-use enforcement).
+ * @property {(input: {records: DnsRecord[]}) => StageResult} stage - Stage DNS
+ *   records (simulated); returns a diff.
+ * @property {(cutoverCapId: string) => CutoverRecord} recordCutover - Record an
+ *   irreversible cutover; succeeds at most once per migration (idempotency).
  */
 
 /**

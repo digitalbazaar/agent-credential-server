@@ -16,10 +16,14 @@
  */
 import {generateText, stepCountIs} from 'ai';
 
-const SYSTEM = `You are a resource server deciding whether an AI agent may \
-access a protected resource. You are NOT permitted to decide access yourself. \
-You MUST call the check_delegation tool with the agent's credential, the \
-agent's DID, and the requested action, and then report ONLY that tool's \
+// Default system prompt: the age-gate / check_delegation access flow. Demos
+// with a different task and tool set (selective disclosure, the Cloudflare
+// migration) pass their own `system` so the model is not told to call a tool
+// it does not have or to end with the wrong verdict format.
+const DEFAULT_SYSTEM = `You are a resource server deciding whether an AI agent \
+may access a protected resource. You are NOT permitted to decide access \
+yourself. You MUST call the check_delegation tool with the agent's credential, \
+the agent's DID, and the requested action, and then report ONLY that tool's \
 verdict. End your reply with exactly "ACCESS GRANTED" or "ACCESS DENIED", \
 matching the tool's authorized result. Never reveal private keys or secrets.`;
 
@@ -65,18 +69,20 @@ function decisionFromTool(toolResults) {
  * @property {string} prompt - The user prompt describing the access request.
  * @property {unknown} model - An AI SDK language model.
  * @property {Record<string, unknown>} tools - The AI SDK tool set.
+ * @property {string} [system] - The system prompt; defaults to the age-gate
+ *   access flow. Demos with a different task and tools pass their own.
  */
 
 /**
- * Run the demo agent for one access decision.
+ * Run the demo agent for one task.
  *
- * @param {RunAgentInput} input - The prompt, model, and tools.
+ * @param {RunAgentInput} input - The prompt, model, tools, and optional system.
  * @returns {Promise<AgentResult>} The structured outcome.
  */
 export async function runAgent(input) {
   const result = await generateText({
     model: /** @type {any} */ (input.model),
-    system: SYSTEM,
+    system: input.system ?? DEFAULT_SYSTEM,
     prompt: input.prompt,
     tools: /** @type {any} */ (input.tools),
     stopWhen: stepCountIs(8)

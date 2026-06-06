@@ -92,9 +92,7 @@ export function buildCloudflareTools(options) {
         if(!chain.authorized) {
           return record('stage_records', {staged: false, reason: chain.reason});
         }
-        return record(
-          'stage_records', server.stage({zone: 'sandbox.example', records})
-        );
+        return record('stage_records', server.stage({records}));
       }
     }),
 

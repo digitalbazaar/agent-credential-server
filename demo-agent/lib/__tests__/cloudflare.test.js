@@ -41,7 +41,7 @@ describe('createCloudflareServer: staging', () => {
       {type: 'A', name: ZONE, content: '192.0.2.1'},
       {type: 'CNAME', name: `www.${ZONE}`, content: ZONE}
     ];
-    const result = server.stage({zone: ZONE, records});
+    const result = server.stage({records});
     expect(result.staged).toBe(true);
     expect(result.diff).toHaveLength(2);
     expect(result.diff[0]).toMatchObject({action: 'create', type: 'A'});
@@ -49,7 +49,7 @@ describe('createCloudflareServer: staging', () => {
 
   it('does not perform a real change (simulation only)', () => {
     const server = createCloudflareServer();
-    const result = server.stage({zone: ZONE, records: []});
+    const result = server.stage({records: []});
     expect(result.simulated).toBe(true);
   });
 });
