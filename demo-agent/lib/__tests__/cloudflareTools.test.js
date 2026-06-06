@@ -11,6 +11,11 @@
 import {buildCloudflareTools} from '../cloudflareTools.js';
 import {buildMigrationScenario} from '../cloudflareScenarios.js';
 import {createCloudflareServer} from '../cloudflare.js';
+import {jest} from '@jest/globals';
+
+// zcap sign/verify across several capabilities is CPU-heavy; give this suite
+// headroom over the 5s default so it stays reliable under parallel CI load.
+jest.setTimeout(15000);
 
 /**
  * Build a fresh tool set bound to a fresh scenario + server.

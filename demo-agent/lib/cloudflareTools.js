@@ -24,6 +24,9 @@ const MIGRATE_ACTION = 'migrate:cloudflare';
  *   The migration scenario (admin credential + root caps + delegations).
  * @property {import('./cloudflare.js').CloudflareServer} server - The simulated
  *   resource server (staging + single-use cutover store).
+ * @property {(record: {name: string, output: unknown}) => void} [onToolResult]
+ *   - Observer invoked with each tool's result (used by the eval to capture
+ *   the authoritative outcomes).
  */
 
 /**
@@ -33,7 +36,22 @@ const MIGRATE_ACTION = 'migrate:cloudflare';
  * @returns {Record<string, unknown>} The tool set keyed by tool name.
  */
 export function buildCloudflareTools(options) {
-  const {scenario, server} = options;
+  const {scenario, server, onToolResult} = options;
+
+  /**
+   * Report a tool result to the observer (if any) and return it unchanged.
+   *
+   * @template T
+   * @param {string} name - The tool name.
+   * @param {T} output - The tool result.
+   * @returns {T} The same result.
+   */
+  function record(name, output) {
+    if(onToolResult) {
+      onToolResult({name, output});
+    }
+    return output;
+  }
 
   // Model A: the agent holds no cutover capability until the gate issues one.
   /** @type {(Record<string, unknown> & {id: string}) | null} */
@@ -45,12 +63,12 @@ export function buildCloudflareTools(options) {
         'Verify the administrator credential authorizes a Cloudflare ' +
         'migration (a domain-admin or devops role).',
       inputSchema: z.object({}),
-      execute: async () => checkDelegation({
+      execute: async () => record('verify_admin', await checkDelegation({
         agentDid: scenario.agentDid,
         requestedAction: MIGRATE_ACTION,
         credential: /** @type {any} */ (scenario.adminCredential),
         requiredClaims: REQUIRED_ROLE
-      })
+      }))
     }),
 
     stage_records: tool({
@@ -72,9 +90,11 @@ export function buildCloudflareTools(options) {
           expectedTarget: STAGE_TARGET
         });
         if(!chain.authorized) {
-          return {staged: false, reason: chain.reason};
+          return record('stage_records', {staged: false, reason: chain.reason});
         }
-        return server.stage({zone: 'sandbox.example', records});
+        return record(
+          'stage_records', server.stage({zone: 'sandbox.example', records})
+        );
       }
     }),
 
@@ -87,7 +107,9 @@ export function buildCloudflareTools(options) {
       execute: async () => {
         // the approval gate: the human reviews + signs the cutover capability
         cutoverCapability = await scenario.approveCutover();
-        return {approved: true, message: 'Cutover approved by the operator.'};
+        return record('request_cutover_approval', {
+          approved: true, message: 'Cutover approved by the operator.'
+        });
       }
     }),
 
@@ -99,10 +121,10 @@ export function buildCloudflareTools(options) {
       execute: async () => {
         // gate: no capability until request_cutover_approval issued one
         if(!cutoverCapability) {
-          return {
+          return record('cutover', {
             authorized: false,
             reason: 'No approved cutover capability; awaiting human approval.'
-          };
+          });
         }
         const chain = await verifyDelegationChainTool({
           rootCapability: scenario.cutoverRootCapability,
@@ -112,14 +134,18 @@ export function buildCloudflareTools(options) {
           expectedTarget: scenario.cutoverTarget
         });
         if(!chain.authorized) {
-          return {authorized: false, reason: chain.reason};
+          return record('cutover', {authorized: false, reason: chain.reason});
         }
         // single-use: consume the capability id; a replay is denied
         const consumed = server.recordCutover(cutoverCapability.id);
         if(!consumed.ok) {
-          return {authorized: false, reason: consumed.reason};
+          return record(
+            'cutover', {authorized: false, reason: consumed.reason}
+          );
         }
-        return {authorized: true, message: 'Nameservers switched (simulated).'};
+        return record('cutover', {
+          authorized: true, message: 'Nameservers switched (simulated).'
+        });
       }
     })
   };
