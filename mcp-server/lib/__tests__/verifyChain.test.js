@@ -92,6 +92,35 @@ describe('verifyDelegationChainTool', () => {
     expect(result.authorized).toBe(true);
   });
 
+  it('denies when the expected action is not what the capability permits',
+    async () => {
+      const alice = await makeController();
+      const bob = await makeController();
+      const expires = new Date(Date.now() + 3600000).toISOString();
+      const root = buildRootCapability({
+        controller: alice.did, invocationTarget: TARGET
+      });
+      const loader = createZcapDocumentLoader({
+        didKeyDriver: driver, rootCapabilities: [root]
+      });
+      // bob's capability allows ACTION; a verifier asking for a different
+      // action must be denied (the leaf does not permit it)
+      const bobZcap = await delegate({
+        parent: root, signer: alice.signer, toController: bob.did, expires,
+        loader
+      });
+
+      const result = await verifyDelegationChainTool({
+        rootCapability: root,
+        delegatedCapability: bobZcap,
+        agentDid: bob.did,
+        expectedAction: 'some-other-action',
+        expectedTarget: TARGET
+      });
+      expect(result.authorized).toBe(false);
+      expect(result.reason).toMatch(/action/i);
+    });
+
   it('authorizes a valid 3-hop chain', async () => {
     const alice = await makeController();
     const bob = await makeController();
