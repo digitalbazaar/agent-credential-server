@@ -9,8 +9,11 @@
  * one of valid, tampered, expired, authn, or sd (selective disclosure).
  */
 import * as scenarios from './scenarios.js';
+import {buildCloudflareTools} from './cloudflareTools.js';
+import {buildMigrationScenario} from './cloudflareScenarios.js';
 import {buildSdTools} from './sdTools.js';
 import {buildTools} from './tools.js';
+import {createCloudflareServer} from './cloudflare.js';
 import {fileURLToPath} from 'node:url';
 import {getModel} from './providers.js';
 import {runAgent} from './agent.js';
@@ -89,6 +92,11 @@ async function runSdDemo(scenarioName, providerName, model) {
   console.log(`Agent DID: ${agentDid}  |  Cryptosuite: ${wallet.cryptosuite}`);
 
   const tools = buildSdTools({wallet});
+  const system =
+    'You prove an agent meets an age requirement using the least disclosure ' +
+    'possible. You do not decide access yourself: request a disclosure from ' +
+    'the wallet, then verify it with the verify_disclosure tool and report ' +
+    'that tool\'s verdict. Never reveal private keys or hidden claims.';
   const prompt =
     'An agent must prove it is over 21 to access age-restricted content, ' +
     'disclosing as little as possible.\n\n' +
@@ -100,7 +108,60 @@ async function runSdDemo(scenarioName, providerName, model) {
 
   step(`Asking ${providerName} to disclose only ${revealClaims.join(', ')} ` +
     'and verify it (this may take a few seconds)…');
-  const result = await runAgent({prompt, model, tools});
+  const result = await runAgent({prompt, model, tools, system});
+  step('Done.');
+
+  const called = result.toolCalls.map(c => c.name).join(', ');
+  console.log(`\nTools called: ${called}`);
+  console.log(`\nAgent: ${result.finalText}`);
+}
+
+/**
+ * Run the Cloudflare migration demo: the agent verifies the admin credential,
+ * stages DNS records, stops for human approval, then cuts over the nameservers
+ * using the single-use capability the approval issues. The agent holds no
+ * Cloudflare token and cannot cut over before approval.
+ *
+ * @param {string} providerName - The resolved provider name.
+ * @param {unknown} model - The AI-SDK model.
+ * @returns {Promise<void>}
+ */
+async function runCloudflareDemo(providerName, model) {
+  step('Issuing the admin credential and scoped delegations…');
+  const scenario = await buildMigrationScenario();
+  const server = createCloudflareServer();
+  const tools = buildCloudflareTools({
+    scenario,
+    server,
+    onToolResult: r => step(
+      `tool ${r.name} → ${JSON.stringify(r.output).slice(0, 120)}`
+    )
+  });
+
+  console.log(`\nScenario: cloudflare  |  Provider: ${providerName}`);
+  console.log(`Agent DID: ${scenario.agentDid}`);
+
+  const system =
+    'You are an operations agent migrating a website to Cloudflare on behalf ' +
+    'of an administrator. You hold no Cloudflare credentials — you act only ' +
+    'through the provided tools, each of which enforces its own ' +
+    'authorization. Never attempt the irreversible nameserver cutover before ' +
+    'obtaining human approval. Report what each tool returns; do not invent ' +
+    'outcomes.';
+  const prompt =
+    'You are migrating a website to Cloudflare on behalf of an ' +
+    'administrator. Follow these steps in order, and stop if any step is ' +
+    'not authorized:\n' +
+    '1. Call verify_admin to confirm the administrator is authorized.\n' +
+    '2. Call stage_records to stage the DNS records, then review the diff.\n' +
+    '3. The nameserver cutover is irreversible and needs human approval. ' +
+    'Call request_cutover_approval to obtain it.\n' +
+    '4. Only after approval, call cutover.\n' +
+    'Report what happened at each step.';
+
+  step(`Asking ${providerName} to run the migration (this may take a few ` +
+    'seconds)…');
+  const result = await runAgent({prompt, model, tools, system});
   step('Done.');
 
   const called = result.toolCalls.map(c => c.name).join(', ');
@@ -118,12 +179,16 @@ async function main() {
     return;
   }
 
+  if(scenarioName === 'cloudflare') {
+    await runCloudflareDemo(providerName, model);
+    return;
+  }
+
   const build = SCENARIOS[scenarioName];
   if(!build) {
-    console.error(
-      `Unknown scenario "${scenarioName}". ` +
-      `Try: ${Object.keys(SCENARIOS).join(', ')}, sd, sd-unlinkable.`
-    );
+    const known = `${Object.keys(SCENARIOS).join(', ')}, sd, ` +
+      'sd-unlinkable, cloudflare';
+    console.error(`Unknown scenario "${scenarioName}". Try: ${known}.`);
     process.exit(1);
   }
 

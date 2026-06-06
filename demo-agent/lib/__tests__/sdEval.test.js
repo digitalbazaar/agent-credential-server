@@ -10,8 +10,13 @@
  */
 import * as scenarios from '../scenarios.js';
 import {buildSdTools} from '../sdTools.js';
+import {jest} from '@jest/globals';
 import {MockLanguageModelV3} from 'ai/test';
 import {runAgent} from '../agent.js';
+
+// BBS sign/derive/verify is CPU-heavy; give this suite headroom over the 5s
+// default so it stays reliable under parallel CI load.
+jest.setTimeout(15000);
 
 /**
  * A mock model that calls request_disclosure then verify_disclosure, then
