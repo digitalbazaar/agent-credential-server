@@ -8,7 +8,7 @@
  */
 import * as Bls12381Multikey from '@digitalbazaar/bls12-381-multikey';
 import * as EcdsaMultikey from '@digitalbazaar/ecdsa-multikey';
-import {BLS_MULTIKEY_HEADER, generateBlsMultikey} from '../core/bls.js';
+import {BLS_MULTIKEY_HEADERS, generateBlsMultikey} from '../core/bls.js';
 import {
   deriveDisclosure, issueSdCredential, verifyDisclosure
 } from '../core/vcSd.js';
@@ -172,10 +172,13 @@ describe('verifyDisclosure', () => {
  */
 async function makeBlsIssuer() {
   const driver = didKeyDriverFactory();
-  driver.use({
-    multibaseMultikeyHeader: BLS_MULTIKEY_HEADER,
-    fromMultibase: Bls12381Multikey.from
-  });
+  // register both BLS12-381 G2 prefixes (zUC6/zUC7) — a generated key may use
+  // either, so a single registration would fail to resolve ~half the time
+  for(const multibaseMultikeyHeader of BLS_MULTIKEY_HEADERS) {
+    driver.use({
+      multibaseMultikeyHeader, fromMultibase: Bls12381Multikey.from
+    });
+  }
   const keyPair = await generateBlsMultikey();
   const {didDocument, methodFor} = await driver.fromKeyPair({
     verificationKeyPair: keyPair

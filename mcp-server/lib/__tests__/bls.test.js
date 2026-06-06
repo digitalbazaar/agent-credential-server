@@ -2,15 +2,20 @@
  * Copyright (c) 2026 Digital Bazaar, Inc.
  */
 import {
-  BLS_MULTIKEY_HEADER, BLS_SD_ALGORITHM, generateBlsMultikey, importBlsMultikey
+  BLS_MULTIKEY_HEADERS, BLS_SD_ALGORITHM, generateBlsMultikey, importBlsMultikey
 } from '../core/bls.js';
 
 describe('generateBlsMultikey', () => {
-  it('generates a BLS12-381 multikey with a zUC7 publicKeyMultibase',
+  it('generates a multikey whose publicKeyMultibase uses a valid G2 prefix',
     async () => {
-      const key = await generateBlsMultikey();
-      expect(key.publicKeyMultibase).toMatch(/^zUC7/);
-      expect(key.secretKeyMultibase).toEqual(expect.any(String));
+      // generate several: the 4th char of a G2 key varies (zUC6/zUC7), so a
+      // single sample could mask the variability that broke CI
+      for(let i = 0; i < 12; i++) {
+        const key = await generateBlsMultikey();
+        const prefix = key.publicKeyMultibase.slice(0, 4);
+        expect(BLS_MULTIKEY_HEADERS).toContain(prefix);
+        expect(key.secretKeyMultibase).toEqual(expect.any(String));
+      }
     });
 
   it('produces a working BBS signer', async () => {
@@ -48,8 +53,8 @@ describe('importBlsMultikey', () => {
 });
 
 describe('constants', () => {
-  it('BLS_MULTIKEY_HEADER is the BLS12-381 did:key prefix', () => {
-    expect(BLS_MULTIKEY_HEADER).toBe('zUC7');
+  it('BLS_MULTIKEY_HEADERS are the two BLS12-381 G2 did:key prefixes', () => {
+    expect(BLS_MULTIKEY_HEADERS).toEqual(['zUC6', 'zUC7']);
   });
   it('BLS_SD_ALGORITHM is the bbs-2023 required algorithm', () => {
     expect(BLS_SD_ALGORITHM).toBe('BBS-BLS12-381-SHA-256');
