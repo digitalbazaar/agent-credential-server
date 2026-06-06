@@ -126,4 +126,22 @@ describe('cloudflare eval: the approval gate is unbypassable (R-X-1)', () => {
       expect(cutovers[0].output.authorized).toBe(true);
       expect(cutovers[1].output.authorized).toBe(false);
     });
+
+  it('denies a second cutover even after RE-APPROVAL (idempotency, not ' +
+    'per-capability)', async () => {
+    // re-approval mints a fresh cutover capability with a new id; the
+    // irreversible step must still happen at most once per migration, so the
+    // second cutover is denied even though the second capability is valid
+    const {toolResults} = await runMigration([
+      {toolName: 'verify_admin', input: {}},
+      {toolName: 'request_cutover_approval', input: {}},
+      {toolName: 'cutover', input: {}},
+      {toolName: 'request_cutover_approval', input: {}},
+      {toolName: 'cutover', input: {}}
+    ]);
+    const cutovers = toolResults.filter(r => r.name === 'cutover');
+    expect(cutovers[0].output.authorized).toBe(true);
+    expect(cutovers[1].output.authorized).toBe(false);
+    expect(cutovers[1].output.reason).toMatch(/already cut over|once/i);
+  });
 });

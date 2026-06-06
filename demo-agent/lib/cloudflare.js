@@ -50,9 +50,16 @@
  * @returns {CloudflareServer} The simulated server.
  */
 export function createCloudflareServer() {
-  // Consumed cutover capability ids (single-use enforcement).
-  /** @type {Set<string>} */
-  const consumedCutovers = new Set();
+  // The irreversible nameserver cutover happens AT MOST ONCE per migration —
+  // this is an idempotency guard, not a per-capability check. Keying on the
+  // capability id alone would be defeated by re-approval (a fresh approval
+  // mints a new id), letting the agent cut over twice. The security property
+  // we want is "the irreversible effect occurs once", so the server records
+  // that a cutover has happened at all. (A production system would add
+  // transactional rollback for partial failures; see the spec.)
+  let cutoverDone = false;
+  /** @type {string | null} the capability id that performed the cutover */
+  let cutoverCapId = null;
 
   return Object.freeze({
     stage({records}) {
@@ -65,14 +72,18 @@ export function createCloudflareServer() {
       };
     },
 
-    recordCutover(cutoverCapId) {
-      if(consumedCutovers.has(cutoverCapId)) {
+    recordCutover(capId) {
+      if(cutoverDone) {
+        const sameCap = capId === cutoverCapId;
         return {
           ok: false,
-          reason: `Cutover capability ${cutoverCapId} already used (single-use)`
+          reason: sameCap ?
+            `Cutover capability ${capId} already used (single-use)` :
+            'This migration has already cut over; nameservers switch once.'
         };
       }
-      consumedCutovers.add(cutoverCapId);
+      cutoverDone = true;
+      cutoverCapId = capId;
       return {ok: true};
     }
   });

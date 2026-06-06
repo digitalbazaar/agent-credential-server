@@ -22,12 +22,16 @@ describe('createCloudflareServer: single-use cutover', () => {
     expect(replay.reason).toMatch(/already|used|consume/i);
   });
 
-  it('tracks distinct cutover ids independently', () => {
-    const server = createCloudflareServer();
-    expect(server.recordCutover('urn:uuid:a').ok).toBe(true);
-    expect(server.recordCutover('urn:uuid:b').ok).toBe(true);
-    expect(server.recordCutover('urn:uuid:a').ok).toBe(false);
-  });
+  it('cuts over at most once per migration, even with a different capability',
+    () => {
+      // idempotency, not per-id: a second cutover is denied regardless of the
+      // capability id (a re-approval mints a fresh id; the effect happens once)
+      const server = createCloudflareServer();
+      expect(server.recordCutover('urn:uuid:a').ok).toBe(true);
+      const second = server.recordCutover('urn:uuid:b');
+      expect(second.ok).toBe(false);
+      expect(second.reason).toMatch(/already cut over|once/i);
+    });
 });
 
 describe('createCloudflareServer: staging', () => {

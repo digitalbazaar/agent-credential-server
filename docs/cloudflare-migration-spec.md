@@ -118,9 +118,10 @@ carry the binding and replay protection.
    reviews the diff and signs the scoped, single-use cutover capability (Model
    A, §6) — that signature *is* the approval.
 5. **Cutover:** the agent presents the freshly-signed cutover capability; the
-   resource server verifies the delegation chain, checks the single-use nonce
-   store, consumes it, then switches nameservers (simulated). A replay of the
-   same capability is denied.
+   resource server verifies the delegation chain, then performs the cutover
+   only if this migration has not already cut over (idempotency — see §8),
+   and switches nameservers (simulated). A replayed capability is denied, and
+   so is a second cutover under a freshly re-approved capability.
 6. Confirm and report. Any failed verification at any step denies and halts.
 
 ## 8. Security & privacy
@@ -129,6 +130,20 @@ carry the binding and replay protection.
   login never leave the resource server. The agent holds only scoped zcaps.
 - **Least privilege + attenuation.** Each capability names one action and one
   target; the cutover is single-use and short-lived.
+- **Idempotency on the irreversible step (the real guarantee).** The threat is
+  not "is each call authorized" — it is double-execution of a non-idempotent
+  privileged action. Both a replayed cutover *and* a fresh cutover capability
+  minted by a second approval are individually valid, yet must not flip the
+  nameservers twice. So the resource server enforces "the cutover happens at
+  most once per migration" as an **idempotency** guard keyed on the migration,
+  not on the capability id. (Keying on the capability id alone is the subtle
+  bug: re-approval defeats it.)
+- **Out of scope — transactional rollback.** A production migration would wrap
+  the multi-step flow in a transaction / saga so a partial failure (staging
+  succeeded, cutover failed midway) is rolled back via compensating actions.
+  That is the standard production pattern, but it is about *atomicity across
+  steps*, a different concern from the *idempotency of one step* above. The
+  demo simulates each step and does not model rollback.
 - **Revocability.** The admin (or org) can revoke a delegation mid-flight via
   the credential status list; step verification re-checks it.
 - **Personal data:** minimal — DIDs and an admin role claim. No end-user PII.
