@@ -45,3 +45,25 @@ npm run start --workspace web                    # serves the SPA + the API
 
 The verdict always comes from the server's `check_delegation` tool, never the
 browser (KYA-OS R-X-1). The site runs the same code the conformance tests cover.
+
+## Live model (opt-in, local only)
+
+By default the applied demos use a deterministic mock model — offline, no API
+key — so the site is safe to host publicly. A live model is a local opt-in and
+is intentionally not wired into the public path; drive a live model through the
+`demo-agent` CLI instead (`npm run start --workspace=demo-agent -- dmv`).
+
+## Deploy
+
+The hosting target is deliberately open (this demo may move to its own repo), so
+nothing here hard-codes a platform. The shape it needs:
+
+1. Build the client: `cd web/client && npm install && npm run build` → `web/public`.
+2. Run the server: `npm run start --workspace=web` (honors `PORT` and `HOST`).
+3. Serve over TLS behind any reverse proxy / PaaS that can run a Node process.
+4. Keep the default (mock) model path — do not set a live-model key on a public
+   host without rate-limiting and abuse protection.
+
+The server is a single stateless Node process; scale it horizontally if needed.
+No database, no persisted state — each request builds ephemeral keys server-side
+and returns only public artifacts.
