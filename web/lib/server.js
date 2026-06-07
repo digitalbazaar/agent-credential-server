@@ -12,8 +12,16 @@
  * every response; this file adds no logic that could bypass them.
  */
 import {getScenario, postCheckDelegation} from './handlers.js';
+import {existsSync} from 'node:fs';
 import Fastify from 'fastify';
+import fastifyStatic from '@fastify/static';
+import {fileURLToPath} from 'node:url';
 import {scenarioNames} from './scenarios.js';
+
+// the built Vue client (web/client → web/public); served as static files when
+// it has been built. Absent in a fresh checkout or in the test run, which is
+// fine — the API routes work without it.
+const PUBLIC_DIR = fileURLToPath(new URL('../public', import.meta.url));
 
 /**
  * Build the Fastify app with the API routes registered. Does not listen — the
@@ -41,6 +49,11 @@ export function buildApp(options = {}) {
       /** @type {any} */ (request.body));
     return reply.code(status).send(body);
   });
+
+  // serve the built SPA (and its SPA fallback) only if it has been built
+  if(existsSync(PUBLIC_DIR)) {
+    app.register(fastifyStatic, {root: PUBLIC_DIR});
+  }
 
   return app;
 }

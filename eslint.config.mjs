@@ -17,7 +17,10 @@ export default [
     }
   },
   {
-    // spikes are disposable de-risk scratch files, not production code
-    ignores: ['**/spikes/**']
+    // spikes are disposable de-risk scratch files, not production code; the
+    // web client is a separate Vue + TypeScript toolchain (linted/typed by
+    // vue-tsc, not this node-recommended JSDoc preset), and web/public is its
+    // build output
+    ignores: ['**/spikes/**', 'web/client/**', 'web/public/**']
   }
 ];
