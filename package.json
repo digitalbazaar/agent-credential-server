@@ -3,7 +3,8 @@
   "private": true,
   "workspaces": [
     "mcp-server",
-    "demo-agent"
+    "demo-agent",
+    "web"
   ],
   "scripts": {
     "lint": "eslint .",
