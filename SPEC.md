@@ -7,11 +7,17 @@ implementation of KYA-OS: a clean, readable, spec-traced MCP-I server built on
 DB's real Verifiable Credential stack. Conformance is table stakes; readability
 and spec-traceability are the point.
 
-> Status: **Phase 1 DB-stack swap essentially complete** — crypto → multikey,
-> vc → VC 2.0 Data Integrity, delegation chain → zcap, and the model-agnostic
-> demo-agent with its eval gate are all merged (see §6). The hand-rolled JWT
-> path is gone. Remaining: remove `@noble` (a multikey-native refactor) and
-> minor polish. §3 below is the pre–Phase-1 "before" snapshot, kept for context.
+> Status (2026-06-06): **Phases 0 through 2.5 complete and merged.** The DB-stack
+> swap (crypto → multikey, vc → VC 2.0 Data Integrity, delegation chain → zcap),
+> the model-agnostic demo-agent with its eval gate, the reference-impl polish
+> (REQUIREMENTS/CONFORMANCE traceability, README, spec-citation comments),
+> selective disclosure (L3 `ecdsa-sd-2023` and unlinkable `bbs-2023`), the two
+> applied demos (Cloudflare migration, CA DMV vehicle registration), and the
+> hosted OpenAI-compatible provider are all in `main`. `@noble` is removed;
+> `did:web`, the published claim context, and DB status-list reconciliation are
+> all done. The conformance register is green but for one deliberately-deferred
+> requirement (R-L3-8). **The next defined work is Phase 3 (web demo) — see §6.**
+> §3 below is the pre–Phase-1 "before" snapshot, kept for historical context.
 
 ---
 
@@ -196,21 +202,52 @@ step = its own PR.
   and leakage canaries) runs in CI. Added offline did:key agent resolution so
   the authn path is deterministic. Removed the dead JWT `issueCredential` and
   its test.
-- ⏳ **Remaining cleanup**: remove `@noble` (still used by the challenge-auth
-  `sign`/`verify` bridge and `deriveDidKeyIssuer` — needs a multikey-native
-  seed→pubkey first); reconcile `revocation.js` with DB status-list; native
-  `did:web` resolution; publish the claim context.
+- ✅ **Remaining cleanup (DONE)**: `@noble` removed (Ed25519 public keys now
+  derived with Node `crypto`); `revocation.js` reconciled with DB
+  `@digitalbazaar/vc-status-list`; native `did:web` resolution added
+  (`lib/core/didWeb.js`); claim context published
+  (`contexts/agent-credential-v1.jsonld`, served offline at its canonical URL).
 
-### Phase 1.5 — Reference-impl polish
-- `REQUIREMENTS.md` + `docs/L1.md` + `docs/L2.md`.
-- Spec-citation comments at enforcement points.
-- README rewrite: lead with "DB reference implementation of KYA-OS L1/L2".
-- Conformance suite green; map each MUST → test.
+### Phase 1.5 — Reference-impl polish ✅ DONE
+- ✅ `docs/conformance/REQUIREMENTS.md` (R-L1/L2/L3/X register) + `docs/L1.md` +
+  `docs/L2.md`.
+- ✅ `// KYA-OS R-Lx-n` spec-citation comments at each enforcement point.
+- ✅ README rewrite: leads with "DB reference implementation of KYA-OS L1 & L2".
+- ✅ `docs/conformance/CONFORMANCE.md` — every MUST mapped to a proving test.
 
-### Phase 2 — Selective disclosure (the L3 wow) — separate effort
-- `ecdsa-sd-2023` (new ECDSA keys, not Ed25519).
-- Demo: agent proves `over_21` without revealing birthdate / rest of VC.
-- New tools: `derive_disclosure` / verify a derived presentation.
+### Phase 2 — Selective disclosure (L3) ✅ DONE
+- ✅ `ecdsa-sd-2023` (P-256 ECDSA keys). New tools `issue_sd_credential`,
+  `derive_disclosure`, `verify_disclosure`.
+- ✅ Demo: the agent proves an ISO `age_over_NN` flag without revealing the
+  birthdate or the rest of the credential (`sd` CLI scenario).
+
+### Phase 2.5 — Unlinkable selective disclosure (L3) ✅ DONE
+- ✅ `bbs-2023` (BLS12-381 keys), selected by the `cryptosuite` option on the
+  same three SD tools. Two derivations from one credential are uncorrelatable.
+- ✅ Demo: the `sd-unlinkable` CLI scenario.
+
+### Applied demos ✅ DONE
+- ✅ **Cloudflare migration** (PR #25): an admin delegates a scoped, gated,
+  single-use site migration; the agent holds no Cloudflare token.
+- ✅ **CA DMV vehicle registration** (PR #28): a verified driver delegates a
+  scoped `register-vehicle` capability; eligibility proven without the license
+  number.
+- ✅ **Hosted OpenAI-compatible provider** (PR #20): drives the demo with
+  Kimi / DeepSeek / OpenAI, the cost-effective models teams actually deploy.
+
+### Phase 3 — Web demo (NEXT) ⏳ PLANNED
+Make the reference implementation **runnable in a browser**, so the L1/L2/L3
+flows can be seen without a terminal or an API key. Detailed plan:
+`docs/web-demo-plan.md`. Headline constraints: the MCP server is stdio-only, so
+the web demo calls the same `lib/core` + `lib/tools` functions through a thin
+HTTP layer; private keys and any model calls stay server-side; the eval gate and
+the "tool is the authority, never the model" property must survive the port.
+
+### Phase 4 — L3-8: credential-to-token bridging + audit trail (DEFERRED)
+The one out-of-scope conformance row (R-L3-8): bridge a verified credential or
+delegation to a short-lived bearer token, with a tamper-evident audit trail of
+each authorization decision — turning "the AI did it" into a real log. Not yet
+scheduled; noted here so the register and the roadmap agree.
 
 ---
 
