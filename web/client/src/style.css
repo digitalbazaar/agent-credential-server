@@ -200,3 +200,96 @@ button:disabled {
   font-size: 0.82rem;
   line-height: 1.45;
 }
+
+/* tab nav */
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.5rem 0 1.5rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs button {
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 0.5rem 0.4rem;
+  margin-bottom: -1px;
+  font-weight: 600;
+}
+
+.tabs button.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+/* selective-disclosure split */
+.split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 620px) {
+  .split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pane {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 1rem;
+}
+
+.pane h3 {
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+}
+
+.pane.wallet ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.pane.wallet li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.35rem 0;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+
+.pane.wallet li.disclosed {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.tag {
+  font-size: 0.75rem;
+  color: var(--pass);
+}
+
+.tag.hidden {
+  color: var(--muted);
+}
+
+.pane .note {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0.6rem 0 0;
+}
+
+.unlinkable-note {
+  margin-top: 1rem;
+  color: var(--muted);
+}
+
+.unlinkable-note.ok {
+  color: var(--pass);
+}
