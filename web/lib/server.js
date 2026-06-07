@@ -12,6 +12,7 @@
  * every response; this file adds no logic that could bypass them.
  */
 import {getScenario, postCheckDelegation} from './handlers.js';
+import {postDisclose, postVerifyDisclosure} from './sdHandlers.js';
 import {existsSync} from 'node:fs';
 import Fastify from 'fastify';
 import fastifyStatic from '@fastify/static';
@@ -46,6 +47,21 @@ export function buildApp(options = {}) {
   // verify a credential against a requested action via checkDelegation
   app.post('/api/check-delegation', async (request, reply) => {
     const {status, body} = await postCheckDelegation(
+      /** @type {any} */ (request.body));
+    return reply.code(status).send(body);
+  });
+
+  // derive a minimal selective-disclosure reveal (the full credential stays
+  // server-side in the wallet); mode is 'linkable' | 'unlinkable'
+  app.post('/api/sd/disclose/:mode', async (request, reply) => {
+    const {mode} = /** @type {{mode: string}} */ (request.params);
+    const {status, body} = await postDisclose(mode);
+    return reply.code(status).send(body);
+  });
+
+  // verify a reveal document's derived selective-disclosure proof
+  app.post('/api/sd/verify', async (request, reply) => {
+    const {status, body} = await postVerifyDisclosure(
       /** @type {any} */ (request.body));
     return reply.code(status).send(body);
   });

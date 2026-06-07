@@ -56,3 +56,41 @@ export async function checkDelegation(
   });
   return res.json() as Promise<DelegationVerdict>;
 }
+
+export interface DisclosureResponse {
+  mode: 'linkable' | 'unlinkable';
+  cryptosuite: string;
+  agentDid: string;
+  heldClaims: string[];
+  disclosedClaims: string[];
+  hiddenCount: number;
+  reveal: Record<string, unknown>;
+  secondReveal: Record<string, unknown> | null;
+}
+
+export interface DisclosureVerdict {
+  valid: boolean;
+  reason?: string;
+}
+
+async function postJson<T>(url: string, body?: unknown): Promise<T> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {'content-type': 'application/json'},
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  return res.json() as Promise<T>;
+}
+
+export async function disclose(
+  mode: 'linkable' | 'unlinkable'
+): Promise<DisclosureResponse> {
+  return postJson<DisclosureResponse>(`/api/sd/disclose/${mode}`);
+}
+
+export async function verifyDisclosure(
+  reveal: Record<string, unknown>,
+  cryptosuite: string
+): Promise<DisclosureVerdict> {
+  return postJson<DisclosureVerdict>('/api/sd/verify', {reveal, cryptosuite});
+}
