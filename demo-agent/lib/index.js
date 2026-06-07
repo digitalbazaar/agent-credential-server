@@ -6,14 +6,18 @@
  * Provider-agnostic — pick the model with AGENT_PROVIDER or --provider.
  *
  * Usage: `node lib/index.js <scenario> [--provider=NAME]`, where scenario is
- * one of valid, tampered, expired, authn, or sd (selective disclosure).
+ * one of valid, tampered, expired, authn, sd (selective disclosure),
+ * sd-unlinkable, cloudflare, or dmv (delegated vehicle registration).
  */
 import * as scenarios from './scenarios.js';
 import {buildCloudflareTools} from './cloudflareTools.js';
+import {buildDmvScenario} from './dmvScenarios.js';
+import {buildDmvTools} from './dmvTools.js';
 import {buildMigrationScenario} from './cloudflareScenarios.js';
 import {buildSdTools} from './sdTools.js';
 import {buildTools} from './tools.js';
 import {createCloudflareServer} from './cloudflare.js';
+import {createDmvServer} from './dmv.js';
 import {fileURLToPath} from 'node:url';
 import {getModel} from './providers.js';
 import {runAgent} from './agent.js';
@@ -169,6 +173,56 @@ async function runCloudflareDemo(providerName, model) {
   console.log(`\nAgent: ${result.finalText}`);
 }
 
+/**
+ * Run the CA DMV register-a-vehicle demo: a verified CA driver delegates a
+ * scoped, time-boxed register-vehicle capability to the agent. The agent calls
+ * register_vehicle, which verifies the driver credential, eligibility claims,
+ * the agent auth proof, revocation, and the scoped delegation before recording
+ * the (simulated) registration. The agent holds no DMV credentials and cannot
+ * register beyond the one delegated action.
+ *
+ * @param {string} providerName - The resolved provider name.
+ * @param {unknown} model - The AI-SDK model.
+ * @returns {Promise<void>}
+ */
+async function runDmvDemo(providerName, model) {
+  step('Issuing the driver credential and the scoped delegation…');
+  const scenario = await buildDmvScenario({withAuthProof: true});
+  const server = await createDmvServer();
+  const tools = buildDmvTools({
+    scenario,
+    server,
+    onToolResult: r => step(
+      `tool ${r.name} → ${JSON.stringify(r.output).slice(0, 120)}`
+    )
+  });
+
+  console.log(`\nScenario: dmv  |  Provider: ${providerName}`);
+  console.log(`Agent DID: ${scenario.agentDid}`);
+
+  const system =
+    'You register a vehicle with the DMV on behalf of a driver. You hold no ' +
+    'DMV credentials — you act only through the register_vehicle tool, which ' +
+    'enforces its own authorization. You do not decide eligibility yourself: ' +
+    'call register_vehicle and report its granted/denied verdict. Never ' +
+    'reveal private keys or license PII.';
+  const prompt =
+    'A verified California driver has delegated to you a scoped capability ' +
+    'to register one vehicle on their behalf. Call register_vehicle with the ' +
+    'vehicle details, then report the verdict it returns. Do not decide ' +
+    'eligibility yourself.\n\n' +
+    'Vehicle: 2024 Honda Civic, VIN 1HGEX2024DEMO0001.';
+
+  step(`Asking ${providerName} to register the vehicle (this may take a few ` +
+    'seconds)…');
+  const result = await runAgent({prompt, model, tools, system});
+  step('Done.');
+
+  const called = result.toolCalls.map(c => c.name).join(', ');
+  console.log(`\nTools called: ${called}`);
+  console.log(`\nAgent: ${result.finalText}`);
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const scenarioName = args.find(a => !a.startsWith('--')) ?? 'valid';
@@ -184,10 +238,15 @@ async function main() {
     return;
   }
 
+  if(scenarioName === 'dmv') {
+    await runDmvDemo(providerName, model);
+    return;
+  }
+
   const build = SCENARIOS[scenarioName];
   if(!build) {
     const known = `${Object.keys(SCENARIOS).join(', ')}, sd, ` +
-      'sd-unlinkable, cloudflare';
+      'sd-unlinkable, cloudflare, dmv';
     console.error(`Unknown scenario "${scenarioName}". Try: ${known}.`);
     process.exit(1);
   }
