@@ -7,10 +7,12 @@
 -->
 <script setup lang="ts">
 import DelegationView from './views/DelegationView.vue';
+import DemoRunnerView from './views/DemoRunnerView.vue';
 import DisclosureView from './views/DisclosureView.vue';
 import {ref} from 'vue';
 
-const tab = ref<'delegation' | 'disclosure'>('delegation');
+type Tab = 'delegation' | 'disclosure' | 'demos';
+const tab = ref<Tab>('delegation');
 </script>
 
 <template>
@@ -30,10 +32,17 @@ const tab = ref<'delegation' | 'disclosure'>('delegation');
         >
           Selective disclosure (L3)
         </button>
+        <button
+          :class="{ active: tab === 'demos' }"
+          @click="tab = 'demos'"
+        >
+          Applied demos
+        </button>
       </nav>
     </header>
 
     <DelegationView v-if="tab === 'delegation'" />
-    <DisclosureView v-else />
+    <DisclosureView v-else-if="tab === 'disclosure'" />
+    <DemoRunnerView v-else />
   </main>
 </template>

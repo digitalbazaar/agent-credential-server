@@ -94,3 +94,20 @@ export async function verifyDisclosure(
 ): Promise<DisclosureVerdict> {
   return postJson<DisclosureVerdict>('/api/sd/verify', {reveal, cryptosuite});
 }
+
+export interface DemoRun {
+  name: string;
+  agentDid: string;
+  toolCalls: string[];
+  decisions: Array<{name: string; output: Record<string, unknown>}>;
+  finalText: string;
+}
+
+export async function listDemos(): Promise<string[]> {
+  const {demos} = await getJson<{demos: string[]}>('/api/demos');
+  return demos;
+}
+
+export async function runDemo(name: string): Promise<DemoRun> {
+  return postJson<DemoRun>(`/api/run-demo/${encodeURIComponent(name)}`);
+}
