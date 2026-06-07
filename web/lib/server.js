@@ -11,6 +11,7 @@
  * KYA-OS R-X-1/R-X-2: the handlers run the authoritative checks and sanitize
  * every response; this file adds no logic that could bypass them.
  */
+import {demoNames, runDemo} from './demoRunner.js';
 import {getScenario, postCheckDelegation} from './handlers.js';
 import {postDisclose, postVerifyDisclosure} from './sdHandlers.js';
 import {existsSync} from 'node:fs';
@@ -63,6 +64,16 @@ export function buildApp(options = {}) {
   app.post('/api/sd/verify', async (request, reply) => {
     const {status, body} = await postVerifyDisclosure(
       /** @type {any} */ (request.body));
+    return reply.code(status).send(body);
+  });
+
+  // list the applied demos (cloudflare, dmv)
+  app.get('/api/demos', async () => ({demos: demoNames()}));
+
+  // run an applied demo and return the tool-call trace + tool decisions
+  app.post('/api/run-demo/:name', async (request, reply) => {
+    const {name} = /** @type {{name: string}} */ (request.params);
+    const {status, body} = await runDemo(name);
     return reply.code(status).send(body);
   });
 
