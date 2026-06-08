@@ -97,3 +97,13 @@ Test paths are relative to the workspace root:
 Every in-scope MUST/SHOULD has at least one proving test. The numbered steps of
 the `check_delegation` pipeline (`mcp-server/lib/tools/delegate.js`) map 1:1 to
 R-L2-2, R-L2-3/4/5/6, R-L2-7, and R-L2-9.
+
+## Web shell (no new requirements)
+
+The `web/` browser demo (Phase 3) adds **no new conformance requirements**. Its
+HTTP endpoints are thin adapters that delegate to the same `mcp-server` tools
+covered above — they introduce no new authorization logic, so they inherit the
+existing rows. The shell adds one safety mechanism of its own, a response
+sanitizer enforcing R-X-2 (no key material crosses to the client), proven by
+`web/lib/__tests__/sanitize.test.js` and the canary assertions in the web
+integration tests.

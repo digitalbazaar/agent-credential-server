@@ -235,13 +235,24 @@ step = its own PR.
 - ✅ **Hosted OpenAI-compatible provider** (PR #20): drives the demo with
   Kimi / DeepSeek / OpenAI, the cost-effective models teams actually deploy.
 
-### Phase 3 — Web demo (NEXT) ⏳ PLANNED
-Make the reference implementation **runnable in a browser**, so the L1/L2/L3
-flows can be seen without a terminal or an API key. Detailed plan:
-`docs/web-demo-plan.md`. Headline constraints: the MCP server is stdio-only, so
-the web demo calls the same `lib/core` + `lib/tools` functions through a thin
-HTTP layer; private keys and any model calls stay server-side; the eval gate and
-the "tool is the authority, never the model" property must survive the port.
+### Phase 3 — Web demo ✅ DONE
+The reference implementation is **runnable in a browser**: the L1/L2/L3 flows
+can be seen without a terminal or an API key. Plan: `docs/web-demo-plan.md`.
+Built as a third `web/` workspace — a thin Fastify HTTP shell over the same
+`lib/core` + `lib/tools` functions (the MCP server stays stdio-only), with a
+Vue 3 + Vite client. Shipped in five slices:
+- **W1** — workspace + Fastify shell + scenario/check-delegation endpoints +
+  the response sanitizer (the leakage canary, in code).
+- **W2** — the issue→present→verify pipeline UI with adversarial scenarios.
+- **W3** — selective disclosure (ecdsa-sd-2023 + bbs-2023), wallet/verifier
+  split, non-correlation shown.
+- **W4** — the applied-demo runner (Cloudflare, DMV); the model orchestrates,
+  the tools decide; mock model by default, live model a local opt-in.
+- **W5** — polish, deploy recipe, README "Try it".
+
+Private keys and any model call stay server-side; the "tool is the authority,
+never the model" property and the leakage canary survived the port (no new
+authorization logic — the shell delegates to the covered core).
 
 ### Phase 4 — L3-8: credential-to-token bridging + audit trail (DEFERRED)
 The one out-of-scope conformance row (R-L3-8): bridge a verified credential or

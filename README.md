@@ -82,9 +82,10 @@ MCP Server
 └── verify_delegation_chain → zcap capability-chain verification
 ```
 
-Two npm workspace packages:
+Three npm workspace packages:
 - `mcp-server/` - MCP server exposing DID/VC tools
 - `demo-agent/` - Claude-powered CLI demo of age-gated access control
+- `web/` - browser demo (Fastify API over the same core, Vue 3 client)
 
 Within `mcp-server/lib/`, pure side-effect-free logic lives in `core/`
 (`crypto`, `vc`, `documentLoader`, `zcapChain`, `claimPredicates`,
@@ -105,6 +106,25 @@ npm run start --workspace=demo-agent -- valid     # valid VC → authorized
 npm run start --workspace=demo-agent -- tampered  # modified payload → denied
 npm run start --workspace=demo-agent -- expired   # past TTL → denied
 ```
+
+### Try it in the browser
+
+A web demo runs the L1/L2/L3 flows with no terminal and no API key. Build the
+client once, then start the server, which serves the page and the API together:
+
+```bash
+cd web/client && npm install && npm run build   # → web/public
+npm run start --workspace=web                    # http://127.0.0.1:3000
+```
+
+It has three tabs: the **delegation** pipeline (pick a valid or adversarial
+scenario and watch it pass or fail), **selective disclosure** (a wallet reveals
+one age flag and nothing else; `bbs-2023` shows two uncorrelatable proofs), and
+the **applied demos** (the Cloudflare and DMV flows, showing the agent
+orchestrates while the tools decide). Every verdict comes from the same tools
+the conformance tests cover — never from the browser. The model in the applied
+demos is a deterministic mock by default; a live model is a local opt-in. See
+[`web/README.md`](web/README.md).
 
 ## MCP Tools
 
